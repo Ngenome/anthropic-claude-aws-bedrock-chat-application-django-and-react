@@ -1,5 +1,3 @@
-Based on the provided README, here's an updated version that includes the information about creating a superuser and generating an AuthToken:
-
 # AI Chat Application with Claude and AWS Bedrock
 
 This project is a full-stack AI chat application that uses Claude AI via AWS Bedrock for the backend, and React for the frontend. It allows users to engage in conversations with an AI assistant, manage projects, and handle knowledge bases.
