@@ -1,3 +1,5 @@
+Based on the provided README, here's an updated version that includes the information about creating a superuser and generating an AuthToken:
+
 # AI Chat Application with Claude and AWS Bedrock
 
 This project is a full-stack AI chat application that uses Claude AI via AWS Bedrock for the backend, and React for the frontend. It allows users to engage in conversations with an AI assistant, manage projects, and handle knowledge bases.
@@ -51,7 +53,7 @@ This project is a full-stack AI chat application that uses Claude AI via AWS Bed
    pip install -r requirements.txt
    ```
 4. Set up environment variables:
-   - Create a `.env` file in the `backend` directory
+   - Create a `.env` file in the `backend/aiassistants` directory
    - Add the following variables:
      ```
      SECRET_KEY=your_django_secret_key
@@ -62,7 +64,25 @@ This project is a full-stack AI chat application that uses Claude AI via AWS Bed
    ```
    python manage.py migrate
    ```
-6. Start the Django server:
+6. Create a superuser:
+   ```
+   python manage.py createsuperuser
+   ```
+7. Generate an AuthToken for the superuser:
+   ```
+   python manage.py shell
+   ```
+   In the shell, run:
+   ```python
+   from django.contrib.auth import get_user_model
+   from knox.models import AuthToken
+   from appauth.models import AppUser
+   user = AppUser.objects.get(email='your_superuser_email')
+   token = AuthToken.objects.create(user=user)
+   print(token[1])
+   ```
+   Copy the printed token.
+8. Start the Django server:
    ```
    python manage.py runserver
    ```
@@ -74,10 +94,9 @@ This project is a full-stack AI chat application that uses Claude AI via AWS Bed
    ```
    npm install
    ```
-3. Create a `.env` file and add:
-   ```
-   VITE_API_URL=http://localhost:8000/api/v1
-   ```
+3. Set up the token:
+   - Open `src/constants/token.ts`
+   - Replace the existing token value with your copied AuthToken
 4. Start the development server:
    ```
    npm run dev
@@ -85,8 +104,8 @@ This project is a full-stack AI chat application that uses Claude AI via AWS Bed
 
 ## Usage
 
-1. Open your browser and go to `http://localhost:3000`
-2. Register or log in to your account
+1. Open your browser and go to `http://localhost:5173`
+2. Use the superuser credentials to log in
 3. Create a new project or select an existing one
 4. Start a new chat or continue an existing conversation
 5. Use the file manager to upload and attach files to your chats
@@ -107,13 +126,11 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 This project is licensed under the MIT License.
 
-<!-- follow me on twitter or linkedin /kelvin-ngeno or @_ngenome -->
-
 ## Follow Me
 
 You can find me on:
 
-- Twitter: [@\_ngenome](https://twitter.com/_ngenome)
+- Twitter: [@ngen0me](https://twitter.com/_ngenome)
 - LinkedIn: [kelvin-ngeno](https://linkedin.com/in/kelvin-ngeno)
 
 Feel free to reach out for questions, collaborations, or just to connect!
