@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Verify Your Email Address</title>
+    <style>
+      /* Reset styles */
+      body,
+      p,
+      h1,
+      h2,
+      h3,
+      h4,
+      h5,
+      h6,
+      table,
+      td {
+        margin: 0;
+        padding: 0;
+        font-family: Arial, sans-serif;
+      }
+      body {
+        background-color: #f5f5f5;
+        line-height: 1.6;
+        color: #333333;
+      }
+      .container {
+        max-width: 600px;
+        margin: 0 auto;
+        padding: 20px;
+        background-color: #ffffff;
+      }
+      .header {
+        text-align: center;
+        padding: 20px 0;
+        background-color: #f8f9fa;
+      }
+      .logo {
+        max-width: 150px;
+        height: auto;
+      }
+      .content {
+        padding: 30px 20px;
+      }
+      .button {
+        display: inline-block;
+        padding: 12px 24px;
+        margin: 20px 0;
+        background-color: #007bff;
+        color: #ffffff !important;
+        text-decoration: none;
+        border-radius: 4px;
+        font-weight: bold;
+      }
+      .footer {
+        text-align: center;
+        padding: 20px;
+        font-size: 12px;
+        color: #666666;
+        border-top: 1px solid #eeeeee;
+      }
+      .warning {
+        background-color: #fff3cd;
+        border: 1px solid #ffeeba;
+        color: #856404;
+        padding: 12px;
+        margin: 20px 0;
+        border-radius: 4px;
+      }
+      @media only screen and (max-width: 480px) {
+        .container {
+          width: 100% !important;
+        }
+        .content {
+          padding: 20px 15px !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <img src="{{ logo_url }}" alt="{{ site_name }}" class="logo" />
+      </div>
+
+      <div class="content">
+        <h1>Welcome to {{ site_name }}!</h1>
+
+        <p>Hi {{ user.first_name|default:user.email }},</p>
+
+        <p>
+          Thank you for registering with {{ site_name }}. To complete your
+          registration and verify your email address, please click the button
+          below:
+        </p>
+
+        <div style="text-align: center">
+          <a href="{{ verification_url }}" class="button"
+            >Verify Email Address</a
+          >
+        </div>
+
+        <p>
+          This verification link will expire in {{ token_expiry_hours }} hours.
+        </p>
+
+        <div class="warning">
+          <p>
+            If you didn't create an account with {{ site_name }}, please ignore
+            this email or contact our support team if you have concerns.
+          </p>
+        </div>
+
+        <p>
+          If the button above doesn't work, you can also verify your email by
+          copying and pasting the following URL into your browser:
+        </p>
+
+        <p style="word-break: break-all">{{ verification_url }}</p>
+
+        <p>
+          Need help? Contact our support team at
+          <a href="mailto:{{ support_email }}">{{ support_email }}</a>.
+        </p>
+      </div>
+
+      <div class="footer">
+        <p>&copy; {% now "Y" %} {{ site_name }}. All rights reserved.</p>
+        <p>This email was sent to {{ user.email }}.</p>
+        <p>
+          Please do not reply to this email. For assistance, contact {{
+          support_email }}.
+        </p>
+      </div>
+    </div>
+  </body>
+</html>
