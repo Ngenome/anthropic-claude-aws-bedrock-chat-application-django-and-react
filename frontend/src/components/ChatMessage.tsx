@@ -1,12 +1,12 @@
 import React from "react";
 import Markdown from "react-markdown";
 import { Message } from "@/types/chat";
-import { cn } from "@/lib/utils";
 import { Button } from "./ui/button";
 import { Copy, CheckCheck } from "lucide-react";
 import { toast } from "sonner";
 import { UserIcon, BotIcon } from "lucide-react";
 import remarkGfm from "remark-gfm";
+import { CodeBlock } from "./CodeBlock";
 
 interface ChatMessageProps {
   message: Message;
@@ -79,7 +79,27 @@ export const AssistantMessage = ({ message }: ChatMessageProps) => {
         </div>
         <div className="flex-1">
           <div className="relative group prose dark:prose-invert max-w-none">
-            <Markdown remarkPlugins={[remarkGfm]}>{message.content}</Markdown>
+            <Markdown
+              remarkPlugins={[remarkGfm]}
+              components={{
+                code({ node, inline, className, children, ...props }) {
+                  if (inline) {
+                    return (
+                      <code className={className} {...props}>
+                        {children}
+                      </code>
+                    );
+                  }
+                  return (
+                    <CodeBlock className={className}>
+                      {String(children).replace(/\n$/, "")}
+                    </CodeBlock>
+                  );
+                },
+              }}
+            >
+              {message.content}
+            </Markdown>
             <Button
               variant="ghost"
               size="sm"
