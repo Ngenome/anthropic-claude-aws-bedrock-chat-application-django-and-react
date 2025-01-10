@@ -7,6 +7,7 @@ import axios from "axios";
 import token from "@/constants/token";
 import urls from "@/constants/urls";
 import { Plus, FolderOpen, Loader2 } from "lucide-react";
+import { ThemeToggle } from "./ThemeToggle";
 
 interface Chat {
   id: number;
@@ -67,6 +68,10 @@ export function Sidebar() {
           </div>
         )}
       </ScrollArea>
+
+      <div className="p-4 mt-auto border-t">
+        <ThemeToggle />
+      </div>
     </div>
   );
 }

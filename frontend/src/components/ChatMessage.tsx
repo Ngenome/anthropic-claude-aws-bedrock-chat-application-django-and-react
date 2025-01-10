@@ -1,16 +1,18 @@
 import React from "react";
-import MarkdownPreview from "@uiw/react-markdown-preview";
+import Markdown from "react-markdown";
 import { Message } from "@/types/chat";
 import { cn } from "@/lib/utils";
 import { Button } from "./ui/button";
 import { Copy, CheckCheck } from "lucide-react";
 import { toast } from "sonner";
+import { UserIcon, BotIcon } from "lucide-react";
+import remarkGfm from "remark-gfm";
 
 interface ChatMessageProps {
   message: Message;
 }
 
-export function UserMessage({ message }: ChatMessageProps) {
+export const UserMessage = ({ message }: ChatMessageProps) => {
   const [copied, setCopied] = React.useState(false);
 
   const copyToClipboard = async () => {
@@ -25,39 +27,37 @@ export function UserMessage({ message }: ChatMessageProps) {
   };
 
   return (
-    <div className="flex gap-2 mb-4 items-start">
-      <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white font-semibold">
-        U
-      </div>
-      <div className="flex-1">
-        <div className="relative group">
-          <div className="p-4 rounded-lg bg-blue-100 dark:bg-blue-900/50">
-            <p className="whitespace-pre-wrap text-gray-800 dark:text-gray-200">
-              {message.content}
-            </p>
-          </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
-            onClick={copyToClipboard}
-          >
-            {copied ? (
-              <CheckCheck className="h-4 w-4" />
-            ) : (
-              <Copy className="h-4 w-4" />
-            )}
-          </Button>
+    <div className="px-4 py-6 bg-white dark:bg-gray-800">
+      <div className="max-w-3xl mx-auto flex gap-4">
+        <div className="w-8 h-8 rounded-full bg-gray-300 dark:bg-gray-600 flex items-center justify-center">
+          <UserIcon className="w-5 h-5 text-gray-600 dark:text-gray-300" />
         </div>
-        <span className="text-xs text-gray-500 ml-2">
-          {new Date(message.timestamp || Date.now()).toLocaleTimeString()}
-        </span>
+        <div className="flex-1">
+          <div className="relative group prose dark:prose-invert max-w-none">
+            {message.content}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="absolute top-0 right-0 opacity-0 group-hover:opacity-100 transition-opacity"
+              onClick={copyToClipboard}
+            >
+              {copied ? (
+                <CheckCheck className="h-4 w-4" />
+              ) : (
+                <Copy className="h-4 w-4" />
+              )}
+            </Button>
+          </div>
+          <span className="text-xs text-gray-500 mt-2 block">
+            {new Date(message.timestamp || Date.now()).toLocaleTimeString()}
+          </span>
+        </div>
       </div>
     </div>
   );
-}
+};
 
-export function AssistantMessage({ message }: ChatMessageProps) {
+export const AssistantMessage = ({ message }: ChatMessageProps) => {
   const [copied, setCopied] = React.useState(false);
 
   const copyToClipboard = async () => {
@@ -72,34 +72,32 @@ export function AssistantMessage({ message }: ChatMessageProps) {
   };
 
   return (
-    <div className="flex gap-2 mb-4 items-start">
-      <div className="w-8 h-8 rounded-full bg-purple-600 flex items-center justify-center text-white font-semibold">
-        A
-      </div>
-      <div className="flex-1">
-        <div className="relative group">
-          <div className="p-4 rounded-lg bg-gray-100 dark:bg-gray-800">
-            <MarkdownPreview source={message.content} />
-            <div className="flex justify-end mt-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="opacity-0 group-hover:opacity-100 transition-opacity"
-                onClick={copyToClipboard}
-              >
-                {copied ? (
-                  <CheckCheck className="h-4 w-4" />
-                ) : (
-                  <Copy className="h-4 w-4 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200" />
-                )}
-              </Button>
-            </div>
-          </div>
+    <div className="px-4 py-6 bg-gray-50 dark:bg-gray-900">
+      <div className="max-w-3xl mx-auto flex gap-4">
+        <div className="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center">
+          <BotIcon className="w-5 h-5 text-white" />
         </div>
-        <span className="text-xs text-gray-500 ml-2">
-          {new Date(message.timestamp || Date.now()).toLocaleTimeString()}
-        </span>
+        <div className="flex-1">
+          <div className="relative group prose dark:prose-invert max-w-none">
+            <Markdown remarkPlugins={[remarkGfm]}>{message.content}</Markdown>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="absolute top-0 right-0 opacity-0 group-hover:opacity-100 transition-opacity"
+              onClick={copyToClipboard}
+            >
+              {copied ? (
+                <CheckCheck className="h-4 w-4" />
+              ) : (
+                <Copy className="h-4 w-4" />
+              )}
+            </Button>
+          </div>
+          <span className="text-xs text-gray-500 mt-2 block">
+            {new Date(message.timestamp || Date.now()).toLocaleTimeString()}
+          </span>
+        </div>
       </div>
     </div>
   );
-}
+};

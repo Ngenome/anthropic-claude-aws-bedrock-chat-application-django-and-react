@@ -12,6 +12,7 @@ import { useProject, useProjectChats } from "@/hooks/useProjects";
 import { Loader2, Sidebar } from "lucide-react";
 import { toast } from "sonner";
 import { UserMessage, AssistantMessage } from "./ChatMessage";
+import { ChatInput } from "./ChatInput";
 
 export default function Chat() {
   const { chatId } = useParams<{
@@ -64,13 +65,13 @@ export default function Chat() {
   };
 
   return (
-    <div className="flex flex-col h-full max-h-screen relative">
+    <div className="flex flex-col h-full max-h-screen relative bg-gray-50 dark:bg-gray-900">
       {tokenStats && (
-        <div className="flex-none px-4 py-2 border-b bg-gray-50 dark:bg-gray-900 w-[30%]">
+        <div className="flex-none px-4 max-w-3xl mx-auto py-2 border-b dark:border-gray-800">
           <TokenUsageBar
             current={tokenStats.total_tokens}
             max={200000}
-            label="Chat Token Usage"
+            label="Chat Token Usage:"
           />
         </div>
       )}
@@ -81,6 +82,7 @@ export default function Chat() {
             variant="outline"
             size="sm"
             onClick={() => setDrawerOpen(true)}
+            className="bg-white dark:bg-gray-800"
           >
             <Sidebar className="h-4 w-4 mr-2" />
             {project.name}
@@ -88,45 +90,44 @@ export default function Chat() {
         </div>
       )}
 
-      <ScrollArea className="flex-1 p-4">
-        {messages?.map((message, i) =>
-          message.role === "user" ? (
-            <UserMessage key={i} message={message} />
-          ) : (
-            <AssistantMessage key={i} message={message} />
-          )
-        )}
-        {isStreaming && (
-          <div className="flex items-center justify-center p-4">
-            <Loader2 className="h-6 w-6 animate-spin text-gray-500" />
-          </div>
-        )}
-        <div ref={messagesEndRef} />
+      <ScrollArea className="flex-1 overflow-y-auto">
+        <div className="max-w-3xl mx-auto">
+          {messages?.length === 0 && (
+            <div className="flex items-center justify-center h-full min-h-[400px]">
+              <h1 className="text-2xl font-semibold text-gray-500 dark:text-gray-400">
+                What can I help with?
+              </h1>
+            </div>
+          )}
+
+          {messages?.map((message, i) =>
+            message.role === "user" ? (
+              <UserMessage key={i} message={message} />
+            ) : (
+              <AssistantMessage key={i} message={message} />
+            )
+          )}
+          {isStreaming && (
+            <div className="flex items-center justify-center p-4">
+              <Loader2 className="h-6 w-6 animate-spin text-gray-500" />
+            </div>
+          )}
+          <div ref={messagesEndRef} />
+        </div>
       </ScrollArea>
 
-      <form onSubmit={onSubmit} className="flex-none p-4 border-t">
-        <div className="flex gap-2">
-          <Textarea
-            value={newMessage}
-            onChange={(e) => setNewMessage(e.target.value)}
-            placeholder="Type your message..."
-            className="flex-1"
-            rows={3}
-            disabled={isStreaming}
-          />
-          <Button
-            type="submit"
-            disabled={isStreaming || !newMessage.trim()}
-            className="min-w-[80px]"
-          >
-            {isStreaming ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              "Send"
-            )}
-          </Button>
+      <div className="flex-none p-4 bg-white dark:bg-gray-900 border-t dark:border-gray-800">
+        <ChatInput
+          onSubmit={onSubmit}
+          newMessage={newMessage}
+          setNewMessage={setNewMessage}
+          isStreaming={isStreaming}
+        />
+        <div className="mt-2 text-xs text-center text-gray-400">
+          This chatbot can make mistakes. Consider checking important
+          information.
         </div>
-      </form>
+      </div>
 
       {project && (
         <ProjectDrawer
