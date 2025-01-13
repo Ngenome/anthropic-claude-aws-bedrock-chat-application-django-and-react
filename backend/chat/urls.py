@@ -5,7 +5,8 @@ from .views import (
     update_chat_system_prompt, SavedSystemPromptListCreateView,
     SavedSystemPromptRetrieveUpdateDestroyView, upload_file, get_attachments,
     delete_attachment_view, get_file_content, ProjectViewSet, ProjectKnowledgeViewSet,
-    ProjectChatsView, get_chat_token_usage,
+    ProjectChatsView, get_chat_token_usage, edit_message, toggle_message_pair,
+    delete_message_pair,
 )
 from rest_framework.routers import DefaultRouter
 
@@ -24,6 +25,11 @@ urlpatterns = [
     path('chats/<int:pk>/', ChatDetailView.as_view(), name='chat-detail'),
     path('claude/', claude_chat_view, name='claude-chat'),
     path('chats/<int:chat_id>/system-prompt/', update_chat_system_prompt),
+    
+    # Message management
+    path('messages/<int:message_id>/edit/', edit_message, name='edit-message'),
+    path('message-pairs/<int:pair_id>/', delete_message_pair, name='delete-message-pair'),
+    path('message-pairs/<int:pair_id>/toggle/', toggle_message_pair, name='toggle-message-pair'),
     
     # System prompts
     path('saved-system-prompts/', SavedSystemPromptListCreateView.as_view()),

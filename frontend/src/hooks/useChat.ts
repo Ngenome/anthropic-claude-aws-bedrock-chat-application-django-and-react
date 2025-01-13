@@ -293,6 +293,7 @@ const useChat = (chatId: string) => {
   return {
     messages,
     newMessage,
+    fetchMessages,
     setNewMessage,
     isStreaming,
     error,

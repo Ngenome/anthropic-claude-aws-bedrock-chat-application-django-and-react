@@ -20,10 +20,12 @@ from .utils.token_counter import count_tokens,get_token_usage_stats
 # Initialize Bedrock client
 bedrock_runtime = boto3.client(
     service_name="bedrock-runtime",
-    region_name="us-east-1",
+    region_name="us-west-2",
     aws_access_key_id=os.getenv("AWS_BEDROCK_ACCESS_KEY_ID"),
     aws_secret_access_key=os.getenv("AWS_BEDROCK_SECRET_ACCESS_KEY")
-)
+)   
+CLAUDE_35_SONNET_V1_0 = "anthropic.claude-3-5-sonnet-20240620-v1:0"
+CLAUDE_35_SONNET_V2 = "anthropic.claude-3-5-sonnet-20241022-v2:0"
 
 
 def stream_response(response):
@@ -193,7 +195,7 @@ def claude_chat_view(request):
     try:
         response = bedrock_runtime.invoke_model_with_response_stream(
             body=body,
-            modelId="anthropic.claude-3-5-sonnet-20240620-v1:0"
+            modelId=CLAUDE_35_SONNET_V2
             
         )
         return StreamingHttpResponse(stream_response(response), content_type='text/event-stream')
@@ -221,6 +223,12 @@ class ChatMessagesListView(generics.ListCreateAPIView):
         return Response({
             'system_prompt': chat.system_prompt,
             'messages': [{
+                'id': message['id'],
+                'message_pair': message['message_pair'],
+                'chat': chat.id,
+                'hidden': message['hidden'],
+                'edited_at': message['edited_at'],
+                'original_text': message['original_text'],
                 'role': message['role'],
                 'type': message['type'],
                 'content': message['text'] if message['type'] == 'text' else message['image'],
@@ -480,3 +488,52 @@ class ProjectChatsView(generics.ListAPIView):
             user=self.request.user,
             project_id=project_id
         ).order_by('-date')
+
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated])
+def edit_message(request, message_id):
+    try:
+        message = Message.objects.get(id=message_id)
+        
+        # Store original text if this is the first edit
+        if not message.original_text:
+            message.original_text = message.text
+            
+        message.text = request.data.get('text', message.text)
+        message.token_count = count_tokens(message.text)
+        message.save()
+        
+        # If this is a user message, remove the associated assistant message
+        if message.role == 'user':
+            message_pair = message.message_pair
+            message_pair.messages.filter(role='assistant').delete()
+            
+        return Response({'status': 'success'})
+    except Message.DoesNotExist:
+        return Response({'error': 'Message not found'}, status=404)
+
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated])
+def toggle_message_pair(request, pair_id):
+    try:
+        message_pair = MessagePair.objects.get(id=pair_id)
+        messages = message_pair.messages.all()
+        hidden = request.data.get('hidden', True)
+        
+        for message in messages:
+            message.hidden = hidden
+            message.save()
+            
+        return Response({'status': 'success'})
+    except MessagePair.DoesNotExist:
+        return Response({'error': 'Message pair not found'}, status=404)
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def delete_message_pair(request, pair_id):
+    try:
+        message_pair = MessagePair.objects.get(id=pair_id)
+        message_pair.delete()
+        return Response({'status': 'success'})
+    except MessagePair.DoesNotExist:
+        return Response({'error': 'Message pair not found'}, status=404)

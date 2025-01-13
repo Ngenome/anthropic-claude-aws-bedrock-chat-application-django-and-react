@@ -3,7 +3,6 @@ import { useParams, useSearchParams } from "react-router-dom";
 import useChat from "@/hooks/useChat";
 import { TokenUsageBar } from "./TokenUsageBar";
 import { Button } from "./ui/button";
-import { Textarea } from "./ui/textarea";
 import { ScrollArea } from "./ui/scroll-area";
 import { useChatTokens } from "@/hooks/useChatTokens";
 import { ProjectDrawer } from "./ProjectDrawer";
@@ -13,6 +12,85 @@ import { Loader2, Sidebar } from "lucide-react";
 import { toast } from "sonner";
 import { UserMessage, AssistantMessage } from "./ChatMessage";
 import { ChatInput } from "./ChatInput";
+import axios from "axios";
+import urls from "@/constants/urls";
+import { Message } from "@/types/chat";
+import token from "@/constants/token";
+
+const MessageList = React.memo(
+  ({
+    messages,
+    isStreaming,
+    onEditMessage,
+    onDeleteMessagePair,
+    onToggleMessagePair,
+  }: {
+    messages: Message[];
+    isStreaming: boolean;
+    onEditMessage: (messageId: string, newText: string) => Promise<void>;
+    onDeleteMessagePair: (pairId: string) => Promise<void>;
+    onToggleMessagePair: (pairId: string, hidden: boolean) => Promise<void>;
+  }) => {
+    const messagesEndRef = useRef<HTMLDivElement>(null);
+
+    // useEffect(() => {
+    //   requestAnimationFrame(() => {
+    //     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    //   });
+    // }, [messages]);
+
+    return (
+      <div className="max-w-3xl mx-auto">
+        {messages?.length === 0 && (
+          <div className="flex items-center justify-center h-full min-h-[400px]">
+            <h1 className="text-2xl font-semibold text-gray-500 dark:text-gray-400">
+              What can I help with?
+            </h1>
+          </div>
+        )}
+
+        {messages?.map((message, i) =>
+          message.role === "user" ? (
+            <UserMessage
+              key={i}
+              message={message}
+              onEdit={onEditMessage}
+              onDelete={onDeleteMessagePair}
+              onToggle={onToggleMessagePair}
+            />
+          ) : (
+            <AssistantMessage
+              key={i}
+              message={message}
+              onEdit={onEditMessage}
+              onDelete={onDeleteMessagePair}
+              onToggle={onToggleMessagePair}
+            />
+          )
+        )}
+        {isStreaming && (
+          <div className="flex items-center justify-center p-4">
+            <Loader2 className="h-6 w-6 animate-spin text-gray-500" />
+          </div>
+        )}
+        <div ref={messagesEndRef} />
+      </div>
+    );
+  },
+  (prevProps, nextProps) => {
+    return (
+      prevProps.isStreaming === nextProps.isStreaming &&
+      prevProps.messages.length === nextProps.messages.length &&
+      prevProps.messages.every(
+        (msg, i) =>
+          msg.id === nextProps.messages[i].id &&
+          msg.content === nextProps.messages[i].content
+      )
+    );
+  }
+);
+
+MessageList.displayName = "MessageList";
 
 export default function Chat() {
   const { chatId } = useParams<{
@@ -31,6 +109,7 @@ export default function Chat() {
     newMessage,
     setNewMessage,
     chat,
+    fetchMessages,
   } = useChat(chatId || "new");
   const { data: tokenStats } = useChatTokens(chatId);
   const { data: project } = useProject(chat?.project?.toString() || "");
@@ -64,6 +143,61 @@ export default function Chat() {
     }
   };
 
+  const handleEditMessage = async (messageId: string, newText: string) => {
+    // if message ID is undefined, show a toast
+    if (!messageId) {
+      toast.error("Message ID is undefined");
+      return;
+    }
+    try {
+      await axios.patch(
+        `${urls.editMessage(messageId)}`,
+        { text: newText },
+        { headers: { Authorization: `Token ${token}` } }
+      );
+
+      // If this was a user message, we need to get a new response
+      const message = messages.find((m) => m.id === messageId);
+      if (message?.role === "user") {
+        await handleSubmit(new Event("submit") as any, {
+          editedMessageId: messageId,
+          attachedFileIds: [],
+        });
+      }
+
+      // Refresh messages
+      await fetchMessages();
+    } catch (error) {
+      toast.error("Failed to edit message");
+    }
+  };
+
+  const handleDeleteMessagePair = async (pairId: string) => {
+    try {
+      await axios.delete(`${urls.deleteMessagePair(pairId)}`, {
+        headers: { Authorization: `Token ${token}` },
+      });
+      await fetchMessages();
+      toast.success("Message pair deleted");
+    } catch (error) {
+      toast.error("Failed to delete message pair");
+    }
+  };
+
+  const handleToggleMessagePair = async (pairId: string, hidden: boolean) => {
+    try {
+      await axios.patch(
+        `${urls.toggleMessagePair(pairId)}`,
+        { hidden },
+        { headers: { Authorization: `Token ${token}` } }
+      );
+      await fetchMessages();
+      toast.success(hidden ? "Message pair hidden" : "Message pair shown");
+    } catch (error) {
+      toast.error("Failed to toggle message pair");
+    }
+  };
+
   return (
     <div className="flex flex-col h-full max-h-screen relative bg-gray-50 dark:bg-gray-900">
       {tokenStats && (
@@ -91,29 +225,13 @@ export default function Chat() {
       )}
 
       <ScrollArea className="flex-1 overflow-y-auto">
-        <div className="max-w-3xl mx-auto">
-          {messages?.length === 0 && (
-            <div className="flex items-center justify-center h-full min-h-[400px]">
-              <h1 className="text-2xl font-semibold text-gray-500 dark:text-gray-400">
-                What can I help with?
-              </h1>
-            </div>
-          )}
-
-          {messages?.map((message, i) =>
-            message.role === "user" ? (
-              <UserMessage key={i} message={message} />
-            ) : (
-              <AssistantMessage key={i} message={message} />
-            )
-          )}
-          {isStreaming && (
-            <div className="flex items-center justify-center p-4">
-              <Loader2 className="h-6 w-6 animate-spin text-gray-500" />
-            </div>
-          )}
-          <div ref={messagesEndRef} />
-        </div>
+        <MessageList
+          messages={messages}
+          isStreaming={isStreaming}
+          onEditMessage={handleEditMessage}
+          onDeleteMessagePair={handleDeleteMessagePair}
+          onToggleMessagePair={handleToggleMessagePair}
+        />
       </ScrollArea>
 
       <div className="flex-none p-4 bg-white dark:bg-gray-900 border-t dark:border-gray-800">

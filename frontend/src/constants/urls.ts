@@ -29,6 +29,10 @@ const urls = {
     `${BASE_URL}knowledge/${knowledgeId}/toggle/`,
   deleteKnowledge: (knowledgeId: number) =>
     `${BASE_URL}knowledge/${knowledgeId}/`,
+  editMessage: (messageId: string) => `${BASE_URL}messages/${messageId}/edit/`,
+  deleteMessagePair: (pairId: string) => `${BASE_URL}message-pairs/${pairId}/`,
+  toggleMessagePair: (pairId: string) =>
+    `${BASE_URL}message-pairs/${pairId}/toggle/`,
 };
 
 export default urls;

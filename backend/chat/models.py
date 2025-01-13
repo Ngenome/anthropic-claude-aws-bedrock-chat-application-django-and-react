@@ -97,6 +97,9 @@ class Message(models.Model):
     image = models.ImageField(upload_to='chat/images/', null=True, blank=True)
     text = models.TextField()
     token_count = models.IntegerField(default=0)
+    hidden = models.BooleanField(default=False)
+    edited_at = models.DateTimeField(auto_now=True, null=True)
+    original_text = models.TextField(null=True, blank=True)
 
     def __str__(self):
         return f"{self.role} message in {self.message_pair}"
