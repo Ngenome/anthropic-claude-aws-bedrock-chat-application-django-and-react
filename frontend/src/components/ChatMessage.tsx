@@ -12,6 +12,8 @@ import {
   Trash,
   Eye,
   Maximize2,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 import { toast } from "sonner";
 import { UserIcon, BotIcon } from "lucide-react";
@@ -98,7 +100,7 @@ const MessageTimestamp = React.memo(
     timestamp: string | number;
     editedAt?: string | null;
   }) => (
-    <span className="text-xs text-gray-500 mt-2 block">
+    <span className="text-xs text-muted-foreground mt-2 block">
       {new Date(timestamp || Date.now()).toLocaleTimeString()}
       {editedAt && " (edited)"}
     </span>
@@ -145,13 +147,11 @@ export const UserMessage = React.memo(
 
     return (
       <div
-        className={`px-4 py-6 bg-white dark:bg-gray-800 ${
-          isHidden ? "opacity-50" : ""
-        }`}
+        className={`px-4 py-6 bg-background ${isHidden ? "opacity-50" : ""}`}
       >
         <div className="max-w-3xl mx-auto flex gap-4">
-          <div className="w-8 h-8 rounded-full bg-gray-300 dark:bg-gray-600 flex items-center justify-center">
-            <UserIcon className="w-5 h-5 text-gray-600 dark:text-gray-300" />
+          <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
+            <UserIcon className="w-5 h-5 text-muted-foreground" />
           </div>
           <div className="flex-1">
             <div className="relative group prose dark:prose-invert max-w-none">
@@ -179,7 +179,7 @@ export const UserMessage = React.memo(
                 </div>
               ) : (
                 <>
-                  {message.content}
+                  <div className="text-foreground">{message.content}</div>
                   <MessageControls
                     isEditing={isEditing}
                     setIsEditing={setIsEditing}
@@ -213,6 +213,20 @@ export const AssistantMessage = React.memo(
       code: string;
       language?: string;
     } | null>(null);
+    const [showThinking, setShowThinking] = useState(false);
+
+    // Function to process content and extract thinking section
+    const processContent = (content: string) => {
+      const thinkingMatch = content.match(/<Thinking>([\s\S]*?)<\/Thinking>/);
+      const thinking = thinkingMatch ? thinkingMatch[1].trim() : null;
+      const mainContent = content
+        .replace(/<Thinking>[\s\S]*?<\/Thinking>/, "")
+        .trim();
+
+      return { thinking, mainContent };
+    };
+
+    const { thinking, mainContent } = processContent(message.content);
 
     const handleSaveEdit = async () => {
       if (onEdit) {
@@ -245,14 +259,10 @@ export const AssistantMessage = React.memo(
     };
 
     return (
-      <div
-        className={`px-4 py-6 bg-gray-50 dark:bg-gray-900 ${
-          isHidden ? "opacity-50" : ""
-        }`}
-      >
+      <div className={`px-4 py-6 bg-muted/50 ${isHidden ? "opacity-50" : ""}`}>
         <div className="max-w-3xl mx-auto flex gap-4">
-          <div className="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center">
-            <BotIcon className="w-5 h-5 text-white" />
+          <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center">
+            <BotIcon className="w-5 h-5 text-primary-foreground" />
           </div>
           <div className="flex-1">
             <div className="relative group prose dark:prose-invert max-w-none">
@@ -280,6 +290,62 @@ export const AssistantMessage = React.memo(
                 </div>
               ) : (
                 <>
+                  {thinking && (
+                    <div className="mb-4">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setShowThinking(!showThinking)}
+                        className="mb-2 text-muted-foreground hover:text-foreground"
+                      >
+                        {showThinking ? (
+                          <ChevronDown className="h-4 w-4 mr-2" />
+                        ) : (
+                          <ChevronRight className="h-4 w-4 mr-2" />
+                        )}
+                        Thinking Process
+                      </Button>
+                      {showThinking && (
+                        <div className="pl-4 border-l-2 border-muted">
+                          <Markdown
+                            remarkPlugins={[remarkGfm]}
+                            components={{
+                              code({ className, children }) {
+                                const code = String(children).replace(
+                                  /\n$/,
+                                  ""
+                                );
+                                const language = className?.replace(
+                                  "language-",
+                                  ""
+                                );
+
+                                return (
+                                  <div className="relative group">
+                                    <CodeBlock className={className}>
+                                      {code}
+                                    </CodeBlock>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="absolute top-2 right-12 opacity-0 group-hover:opacity-100 transition-opacity"
+                                      onClick={() =>
+                                        setFullScreenCode({ code, language })
+                                      }
+                                    >
+                                      <Maximize2 className="h-4 w-4" />
+                                    </Button>
+                                  </div>
+                                );
+                              },
+                            }}
+                          >
+                            {thinking}
+                          </Markdown>
+                        </div>
+                      )}
+                    </div>
+                  )}
                   <Markdown
                     remarkPlugins={[remarkGfm]}
                     components={{
@@ -305,7 +371,7 @@ export const AssistantMessage = React.memo(
                       },
                     }}
                   >
-                    {message.content}
+                    {mainContent}
                   </Markdown>
                   <MessageControls
                     isEditing={isEditing}

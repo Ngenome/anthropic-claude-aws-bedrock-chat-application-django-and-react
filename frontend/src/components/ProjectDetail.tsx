@@ -14,6 +14,7 @@ import { AddKnowledgeDialog } from "./AddKnowledgeDialog";
 import { KnowledgeItem } from "./KnowledgeItem";
 import { Card, CardHeader, CardTitle, CardContent } from "./ui/card";
 import { toast } from "sonner";
+import { Chat } from "@/types/chat";
 
 export default function ProjectDetail() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -122,7 +123,7 @@ export default function ProjectDetail() {
                 >
                   New Chat
                 </Button>
-                {chats?.map((chat) => (
+                {chats?.map((chat: Chat) => (
                   <div
                     key={chat.id}
                     className="p-2 hover:bg-gray-100 rounded cursor-pointer"
@@ -130,7 +131,7 @@ export default function ProjectDetail() {
                   >
                     <h3 className="font-medium">{chat.title}</h3>
                     <p className="text-sm text-gray-500">
-                      {new Date(chat.date).toLocaleDateString()}
+                      {new Date(chat.created_at).toLocaleDateString()}
                     </p>
                   </div>
                 ))}

@@ -8,7 +8,8 @@ class Project(models.Model):
     user = models.ForeignKey('appauth.AppUser', on_delete=models.CASCADE)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-
+    is_archived = models.BooleanField(default=False)
+    
     def __str__(self):
         return self.name
 
@@ -58,9 +59,9 @@ class Chat(models.Model):
     user = models.ForeignKey('appauth.AppUser', on_delete=models.CASCADE)
     project = models.ForeignKey(Project, on_delete=models.SET_NULL, null=True, blank=True, related_name='chats')
     title = models.CharField(max_length=100)
-    date = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(auto_now_add=True)
     system_prompt = models.TextField(blank=True, null=True)
-
+    is_archived = models.BooleanField(default=False)
     def __str__(self):
         return self.title
 
@@ -77,13 +78,13 @@ class Chat(models.Model):
 
 class MessagePair(models.Model):
     chat = models.ForeignKey(Chat, on_delete=models.CASCADE, related_name='message_pairs')
-    date = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"Message Pair for {self.chat.title} at {self.date}"
+        return f"Message Pair for {self.chat.title} at {self.created_at}"
 
 class Message(models.Model):
-    message_pair = models.ForeignKey(MessagePair, on_delete=models.CASCADE, related_name='messages',default=1)
+    message_pair = models.ForeignKey(MessagePair, on_delete=models.CASCADE, related_name='messages')
     ROLE_CHOICES = (
         ("user", "user"),
         ("assistant", "assistant"),
@@ -100,7 +101,8 @@ class Message(models.Model):
     hidden = models.BooleanField(default=False)
     edited_at = models.DateTimeField(auto_now=True, null=True)
     original_text = models.TextField(null=True, blank=True)
-
+    created_at = models.DateTimeField(auto_now_add=True)
+    is_archived = models.BooleanField(default=False)
     def __str__(self):
         return f"{self.role} message in {self.message_pair}"
 
@@ -114,7 +116,7 @@ class SavedSystemPrompt(models.Model):
     user = models.ForeignKey('appauth.AppUser', on_delete=models.CASCADE)
     title = models.CharField(max_length=100)
     prompt = models.TextField()
-    date_created = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         return self.title
@@ -132,10 +134,10 @@ class TokenUsage(models.Model):
     user = models.ForeignKey('appauth.AppUser', on_delete=models.CASCADE)
     chat = models.ForeignKey(Chat, on_delete=models.CASCADE)
     tokens_used = models.IntegerField()
-    date = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        ordering = ['-date']
+        ordering = ['-created_at']
 
     def __str__(self):
-        return f"{self.user.email} - {self.tokens_used} tokens on {self.date}"
+        return f"{self.user.email} - {self.tokens_used} tokens on {self.created_at}"

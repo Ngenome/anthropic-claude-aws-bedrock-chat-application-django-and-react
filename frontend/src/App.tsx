@@ -10,7 +10,8 @@ import Chat from "@/components/Chat";
 import { Sidebar } from "@/components/Sidebar";
 import Projects from "@/components/Projects";
 import ProjectDetail from "@/components/ProjectDetail";
-import { Toaster } from "@/components/ui/sonner";
+import { Toaster as SonnerToaster } from "@/components/ui/sonner";
+import { Toaster } from "@/components/ui/toaster";
 import { ThemeProvider } from "@/components/ThemeProvider";
 
 const queryClient = new QueryClient();
@@ -39,6 +40,7 @@ const App: React.FC = () => {
             </div>
           </div>
           <Toaster />
+          <SonnerToaster />
         </Router>
       </QueryClientProvider>
     </ThemeProvider>

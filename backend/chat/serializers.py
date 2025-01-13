@@ -11,7 +11,7 @@ class MessageSerializer(serializers.ModelSerializer):
 class ChatSerializer(serializers.ModelSerializer):
     class Meta:
         model = Chat
-        fields = ['id', 'title', 'date', 'system_prompt', 'project', 'user']
+        fields = ['id', 'title', 'created_at', 'system_prompt', 'project', 'user']
 
 class SystemPromptSerializer(serializers.ModelSerializer):
     class Meta:

@@ -30,7 +30,7 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({
   };
 
   return (
-    <div className="relative group">
+    <div className="relative group max-w-[calc(100vw-2rem)] md:max-w-[calc(100vw-4rem)]">
       <Button
         variant="ghost"
         size="sm"
@@ -50,11 +50,14 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({
       >
         {({ className, style, tokens, getLineProps, getTokenProps }) => (
           <pre
-            className={`${className} p-4 rounded-lg overflow-x-auto`}
-            style={style}
+            className={`${className} p-4 rounded-lg overflow-x-auto whitespace-pre-wrap break-all`}
+            style={{
+              ...style,
+              maxWidth: "100%",
+            }}
           >
             {tokens.map((line, i) => (
-              <div key={i} {...getLineProps({ line })}>
+              <div key={i} {...getLineProps({ line })} className="break-words">
                 <span className="select-none opacity-50 mr-4">{i + 1}</span>
                 {line.map((token, key) => (
                   <span key={key} {...getTokenProps({ token })} />

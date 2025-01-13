@@ -2,7 +2,7 @@
 const BASE_URL = "http://localhost:8001/api/v1/chat/";
 export const API_URL = "http://0.0.0.0:8001";
 const urls = {
-  chatList: `${BASE_URL}chat-list/`,
+  chats: `${BASE_URL}chats/`,
   chatMessages: (chatId: string) => `${BASE_URL}chats/${chatId}/messages/`,
   chat: (chatId: string) => `${BASE_URL}chats/${chatId}/`,
   chatTokens: (chatId: string) => `${BASE_URL}chats/${chatId}/tokens/`,

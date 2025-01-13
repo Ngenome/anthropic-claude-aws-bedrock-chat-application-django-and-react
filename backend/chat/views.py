@@ -16,6 +16,7 @@ from rest_framework.response import Response
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from .utils.token_counter import count_tokens,get_token_usage_stats
+from .services.chat_service import ChatService
 
 # Initialize Bedrock client
 bedrock_runtime = boto3.client(
@@ -28,181 +29,65 @@ CLAUDE_35_SONNET_V1_0 = "anthropic.claude-3-5-sonnet-20240620-v1:0"
 CLAUDE_35_SONNET_V2 = "anthropic.claude-3-5-sonnet-20241022-v2:0"
 
 
-def stream_response(response):
-    for chunk in response['body']:
-        chunk_data = json.loads(chunk['chunk']['bytes'].decode())
-        # if the chunk is a message start ignore it, if it is a content block start, ignore it, if it is a content block delta, yield the text content
-        if chunk_data['type'] == 'content_block_delta':
-            print(chunk_data['delta']['text'])
-            yield json.dumps({'type': 'text', 'content': chunk_data['delta']['text']} ) + '\n'
-            
-
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def claude_chat_view(request):
+    chat_service = ChatService()
+
+    # Extract request data
     chat_id = request.data.get('chat_id')
     message_text = request.data.get('message')
     project_id = request.data.get('project_id')
     attachment_ids = request.data.get('attachment_ids', [])
     
-    if chat_id is None or chat_id == 'new':
-        try:
-            title = message_text[:15] + "..."
-            project = None
-            if project_id:
-                try:
-                    project = Project.objects.get(id=project_id, user=request.user)
-                except Project.DoesNotExist:
-                    return Response({'error': 'Project not found'}, status=404)
-            
-            chat = Chat.objects.create(
-                title=title, 
-                user=request.user,
-                project=project
-            )
-        except Exception as e:
-            print(f"Error in claude_chat_view: {str(e)}")
-            return Response({'error': str(e)}, status=500)
-    else:
-        try:
-            chat = Chat.objects.get(id=chat_id, user=request.user)
-        except Chat.DoesNotExist:
-            return Response({'error': 'Chat not found'}, status=404)
-
-    message_pair = MessagePair.objects.create(chat=chat)
-    Message.objects.create(
-        message_pair=message_pair,
-        role="user",
-        text=message_text,
-        type='text'
-    )
-
-    # Get project knowledge and instructions if chat is tied to a project
-    project_context = ""
-    if chat.project:
-        knowledge_items = chat.project.knowledge_items.filter(include_in_chat=True)
-        if knowledge_items:
-            knowledge_text = "\n\n".join([
-                f"### {item.title} ###\n{item.content}"
-                for item in knowledge_items
-            ])
-            project_context = f"\nProject Knowledge:\n{knowledge_text}\n"
+    try:
+        # Create or get existing chat
+        chat = chat_service.create_or_get_chat(request.user, chat_id, message_text, project_id)
         
-        if chat.project.instructions:
-            project_context = f"Project Instructions:\n{chat.project.instructions}\n\n{project_context}"
-
-    # Add project context to the message if it exists
-    if project_context:
-        message_text = f"{project_context}\n\nUser Message:\n{message_text}"
-
-    history_message_pairs = MessagePair.objects.filter(chat=chat).order_by('date')
-    messages = []
-    for pair in history_message_pairs:
-        user_message = pair.messages.filter(role="user").first()
-        assistant_message = pair.messages.filter(role="assistant").first()
-        
-        if user_message:
-            messages.append({
-                'role': 'user',
-                'content': [{'type': 'text', 'text': user_message.text}]
-            })
-            if user_message.type == 'image':
-                messages[-1]['content'].append({
-                    'type': 'image',
-                    'source': {
-                        'type': 'base64',
-                        'media_type': 'image/jpeg',
-                        'data': user_message.image
-                    }
-                })
-        
-        if assistant_message:
-            messages.append({
-                'role': 'assistant',
-                'content': [{'type': 'text', 'text': assistant_message.text}]
-            })
-        
-
-    # if image:
-    #     messages[-1]['content'].append({
-    #         'type': 'image',
-    #         'source': {
-    #             'type': 'base64',
-    #             'media_type': 'image/jpeg',
-    #             'data': image
-    #         }
-    #     })
-    #     Message.objects.create(
-    #         message_pair=message_pair,
-    #         role='user',
-    #         type='image',
-    #         image=image
-    #     )
-    file_contents = []
-    for attachment_id in attachment_ids:
-        try:
-            attachment = Attachment.objects.get(id=attachment_id)
-            content = get_file_contents(attachment.file.path)
-            file_contents.append(f"File: {attachment.original_name}\n\n{content}\n\n")
-        except Attachment.DoesNotExist:
-            continue
-    
-
-    if file_contents:
-        file_context = "Here are the contents of the attached files:\n\n" + "\n".join(file_contents)
-        # to the last message (if it is a user message), append the file context
-        if messages[-1]['role'] == 'user':
-            messages[-1]['content'].append({
-                'type': 'text',
-                'text': file_context
-            })
-
-    # Get project knowledge if chat is tied to a project
-    project_knowledge = get_project_knowledge(chat) if chat else ""
-    
-    # Modify the message construction to include project knowledge
-    if project_knowledge:
-        messages[-1]['content'].append({
-            'type': 'text',
-            'text': project_knowledge
-        })
-
-    body = json.dumps({
-        "anthropic_version": "bedrock-2023-05-31",
-        "max_tokens": 4096,
-        "messages": messages
-    })
-    assistant_response_text = []
-    def stream_response(response):
-        for chunk in response['body']:
-            chunk_data = json.loads(chunk['chunk']['bytes'].decode())
-            if chunk_data['type'] == 'content_block_delta':
-                content = chunk_data['delta']['text']
-                assistant_response_text.append(content)
-                yield json.dumps({'type': 'text', 'content': content}) + '\n'
-                # print(chunk_data['delta']['text'])
-        
-        # After streaming is complete, save the assistant's response to the database
-        complete_response = ''.join(assistant_response_text)
+        # Create message pair and user message
+        message_pair = MessagePair.objects.create(chat=chat)
         Message.objects.create(
             message_pair=message_pair,
-            role="assistant",
-            text=complete_response,
+            role="user",
+            text=message_text,
             type='text'
         )
-        yield json.dumps({'type': 'chat_id', 'content': str(chat.id)}) + '\n'
 
-    try:
-        response = bedrock_runtime.invoke_model_with_response_stream(
-            body=body,
-            modelId=CLAUDE_35_SONNET_V2
+        # Prepare message history with context
+        messages = chat_service.prepare_message_history(chat, message_text, attachment_ids)
+        
+        # Create request body and invoke model
+        body = chat_service.create_chat_request_body(messages, chat)
+        
+        assistant_response_text = []
+        def stream_response(response):
+            for chunk in response['body']:
+                chunk_data = json.loads(chunk['chunk']['bytes'].decode())
+                if chunk_data['type'] == 'content_block_delta':
+                    content = chunk_data['delta']['text']
+                    assistant_response_text.append(content)
+                    yield json.dumps({'type': 'text', 'content': content}) + '\n'
             
-        )
+            # Save complete response
+            complete_response = ''.join(assistant_response_text)
+            Message.objects.create(
+                message_pair=message_pair,
+                role="assistant",
+                text=complete_response,
+                type='text'
+            )
+            yield json.dumps({'type': 'chat_id', 'content': str(chat.id)}) + '\n'
+
+        response = chat_service.invoke_model(body)
         return StreamingHttpResponse(stream_response(response), content_type='text/event-stream')
 
+    except Project.DoesNotExist:
+        return Response({'error': 'Project not found'}, status=404)
+    except Chat.DoesNotExist:
+        return Response({'error': 'Chat not found'}, status=404)
     except Exception as e:
-        # raise the exception
-        raise e
+        print(e)
+        return Response({'error': str(e)}, status=500)
 
 class ChatMessagesListView(generics.ListCreateAPIView):
     serializer_class = MessageSerializer
@@ -210,7 +95,7 @@ class ChatMessagesListView(generics.ListCreateAPIView):
 
     def get_queryset(self):
         chat_id = self.kwargs['chat_id']
-        message_pairs = MessagePair.objects.filter(chat_id=chat_id).order_by('date')
+        message_pairs = MessagePair.objects.filter(chat_id=chat_id).order_by('-created_at')
         messages = []
         for pair in message_pairs:
             messages.extend(pair.messages.all())
@@ -245,7 +130,7 @@ class ChatMessagesListView(generics.ListCreateAPIView):
 @permission_classes([IsAuthenticated])
 def chat_list_view(request):
     if request.method == 'GET':
-        chats = Chat.objects.filter(user=request.user).order_by('-date')
+        chats = Chat.objects.filter(user=request.user).order_by('-created_at')
         return Response([{'id': chat.id, 'title': chat.title} for chat in chats])
     elif request.method == 'POST':
         title = request.data.get('title', 'New Chat')
@@ -271,7 +156,7 @@ class ChatListView(generics.ListCreateAPIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        return Chat.objects.filter(user=self.request.user).order_by('-date')
+        return Chat.objects.filter(user=self.request.user).order_by('-created_at')
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
@@ -280,7 +165,7 @@ class ChatListView(generics.ListCreateAPIView):
 @permission_classes([IsAuthenticated])
 def chat_list_view(request):
     if request.method == 'GET':
-        chats = Chat.objects.filter(user=request.user).order_by('-date')
+        chats = Chat.objects.filter(user=request.user).order_by('-created_at')
         return Response([{'id': chat.id, 'title': chat.title} for chat in chats])
     elif request.method == 'POST':
         title = request.data.get('title', 'New Chat')
@@ -295,7 +180,7 @@ def chat_messages_view(request, chat_id):
     except Chat.DoesNotExist:
         return Response({'error': 'Chat not found'}, status=404)
 
-    message_pairs = MessagePair.objects.filter(chat=chat).order_by('date')
+    message_pairs = MessagePair.objects.filter(chat=chat).order_by('created_at')
     messages = []
     for pair in message_pairs:
         for message in pair.messages.all():
@@ -304,7 +189,7 @@ def chat_messages_view(request, chat_id):
                 'type' : message.type,
                 'text' : message.text if message.type == 'text' else None,
                 'image':  message.image if message.type == 'image' else None,
-                'date' : message.date
+                'created_at' : message.created_at
             })
     return Response(messages)
 
@@ -414,7 +299,7 @@ class ProjectViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['get'])
     def chats(self, request, pk=None):
         project = self.get_object()
-        chats = Chat.objects.filter(project=project).order_by('-date')
+        chats = Chat.objects.filter(project=project).order_by('-created_at')
         serializer = ChatSerializer(chats, many=True)
         return Response(serializer.data)
 
@@ -487,7 +372,7 @@ class ProjectChatsView(generics.ListAPIView):
         return Chat.objects.filter(
             user=self.request.user,
             project_id=project_id
-        ).order_by('-date')
+        ).order_by('-created_at')
 
 @api_view(['PATCH'])
 @permission_classes([IsAuthenticated])

@@ -86,20 +86,22 @@ export const ChatInput = React.memo(
     return (
       <div
         className={`relative transition-all duration-300 ease-in-out ${
-          isFullScreen ? "fixed inset-0 bg-black/50 z-50" : ""
+          isFullScreen
+            ? "fixed inset-0 bg-background/80 backdrop-blur-sm z-50"
+            : ""
         }`}
       >
         <div
           className={`transition-all duration-300 ${
             isFullScreen
-              ? "fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 p-6 rounded-t-xl shadow-lg max-h-[80vh] overflow-hidden"
+              ? "fixed bottom-0 left-0 right-0 bg-background border-t p-6 rounded-t-xl shadow-lg max-h-[80vh] overflow-hidden"
               : ""
           }`}
         >
           <form
             onSubmit={onSubmit}
             className={`relative max-w-3xl mx-auto ${
-              isFullScreen ? "flex flex-col gap-4" : ""
+              isFullScreen ? "flex flex-col space-y-4" : ""
             }`}
           >
             <div className="relative">
@@ -127,8 +129,8 @@ export const ChatInput = React.memo(
                     ? "Compose your message... (Enter for new line, Ctrl+Enter to send)"
                     : "Type your message here... (Enter to send, Shift+Enter for new line)"
                 }
-                className={`w-full resize-none bg-white dark:bg-gray-800 
-                border-gray-200 dark:border-gray-700 rounded-lg
+                className={`w-full resize-none bg-background 
+                border-input focus-visible:ring-ring
                 ${isFullScreen ? "min-h-[200px] pr-4" : "pr-32"}
                 transition-all duration-200`}
                 disabled={isStreaming}
@@ -142,7 +144,7 @@ export const ChatInput = React.memo(
                 }`}
               >
                 <div className="flex items-center space-x-2">
-                  <TooltipProvider>
+                  <TooltipProvider delayDuration={300}>
                     {!isFullScreen && (
                       <Tooltip>
                         <TooltipTrigger asChild>
@@ -151,7 +153,7 @@ export const ChatInput = React.memo(
                             size="icon"
                             variant="ghost"
                             onClick={toggleFullScreen}
-                            className="h-8 w-8"
+                            className="h-8 w-8 hover:bg-accent hover:text-accent-foreground"
                           >
                             <Maximize2 className="h-4 w-4" />
                           </Button>
@@ -166,7 +168,7 @@ export const ChatInput = React.memo(
                           type="button"
                           size="icon"
                           variant="ghost"
-                          className="h-8 w-8"
+                          className="h-8 w-8 hover:bg-accent hover:text-accent-foreground"
                         >
                           <PaperclipIcon className="h-4 w-4" />
                         </Button>
@@ -180,7 +182,7 @@ export const ChatInput = React.memo(
                           type="button"
                           size="icon"
                           variant="ghost"
-                          className="h-8 w-8"
+                          className="h-8 w-8 hover:bg-accent hover:text-accent-foreground"
                         >
                           <SmileIcon className="h-4 w-4" />
                         </Button>
@@ -195,9 +197,8 @@ export const ChatInput = React.memo(
                           size="icon"
                           variant="ghost"
                           onClick={toggleRecording}
-                          className={`h-8 w-8 ${
-                            isRecording ? "text-red-500" : ""
-                          }`}
+                          className={`h-8 w-8 hover:bg-accent hover:text-accent-foreground
+                            ${isRecording ? "text-destructive" : ""}`}
                         >
                           <Mic className="h-4 w-4" />
                         </Button>

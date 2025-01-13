@@ -18,7 +18,7 @@ const ChatList: React.FC = () => {
   useEffect(() => {
     const fetchChats = async () => {
       try {
-        const response = await axios.get<Chat[]>(urls.chatList, {
+        const response = await axios.get<Chat[]>(urls.chats, {
           headers: {
             Authorization: `token ${token}`,
           },
