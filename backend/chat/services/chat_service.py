@@ -93,32 +93,13 @@ class ChatService:
 
     def _build_message_history(self, chat: Chat) -> List[Dict[str, Any]]:
         messages = []
-        for pair in MessagePair.objects.filter(chat=chat).order_by('-created_at'):
-            self._add_message_pair_to_history(pair, messages)
-        return messages
-
-    def _add_message_pair_to_history(self, pair: MessagePair, messages: List[Dict[str, Any]]) -> None:
-        user_message = pair.messages.filter(role="user").first()
-        assistant_message = pair.messages.filter(role="assistant").first()
-
-        if user_message:
-            message_content = [{'type': 'text', 'text': user_message.text}]
-            if user_message.type == 'image':
-                message_content.append({
-                    'type': 'image',
-                    'source': {
-                        'type': 'base64',
-                        'media_type': 'image/jpeg',
-                        'data': user_message.image
-                    }
+        for pair in MessagePair.objects.filter(chat=chat).order_by('created_at'):
+            for message in pair.messages.all():
+                messages.append({
+                    'role': message.role,
+                    'content': message.get_content()
                 })
-            messages.append({'role': 'user', 'content': message_content})
-
-        if assistant_message:
-            messages.append({
-                'role': 'assistant',
-                'content': [{'type': 'text', 'text': assistant_message.text}]
-            })
+        return messages
 
     def _get_attachment_contents(self, attachment_ids: List[str]) -> List[str]:
         file_contents = []
@@ -131,12 +112,35 @@ class ChatService:
                 continue
         return file_contents
 
+    def prepare_message_content(self, message_text: str, files: List[Any]) -> List[Dict[str, Any]]:
+        """Prepare message content with text and files"""
+        content = []
+        
+        # Handle image files
+        for file in files:
+            if file.content_type.startswith('image/'):
+                import base64
+                encoded_image = base64.b64encode(file.read()).decode('utf-8')
+                content.append({
+                    'type': 'image',
+                    'source': {
+                        'type': 'base64',
+                        'media_type': file.content_type,
+                        'data': encoded_image
+                    }
+                })
+        
+        # Add text content
+        if message_text:
+            content.append({
+                'type': 'text',
+                'text': message_text
+            })
+            
+        return content
+
     def create_chat_request_body(self, messages: List[Dict[str, Any]], chat: Chat) -> str:
-        system_prompt = ""
-        if chat.system_prompt:
-            system_prompt = get_coding_system_prompt(chat.system_prompt)
-        else:
-            system_prompt = get_coding_system_prompt("")
+        system_prompt = get_coding_system_prompt(chat.system_prompt or "")
         
         return json.dumps({
             "system": system_prompt,

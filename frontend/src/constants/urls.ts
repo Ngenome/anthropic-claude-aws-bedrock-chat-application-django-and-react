@@ -4,7 +4,7 @@ export const API_URL = "http://0.0.0.0:8001";
 const urls = {
   chats: `${BASE_URL}chats/`,
   chatMessages: (chatId: string) => `${BASE_URL}chats/${chatId}/messages/`,
-  chat: (chatId: string) => `${BASE_URL}chats/${chatId}/`,
+  chatDetail: (chatId: string) => `${BASE_URL}chats/${chatId}/`,
   chatTokens: (chatId: string) => `${BASE_URL}chats/${chatId}/tokens/`,
   claude: `${BASE_URL}claude/`,
   savedSystemPrompts: `${BASE_URL}saved-system-prompts/`,

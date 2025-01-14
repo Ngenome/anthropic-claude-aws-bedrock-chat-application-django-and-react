@@ -4,33 +4,7 @@ import token from "@/constants/token";
 import urls from "@/constants/urls";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-
-interface Message {
-  role: string;
-  content: string;
-  type?: string;
-}
-
-interface Attachment {
-  id: string;
-  name: string;
-  url: string;
-}
-
-interface SavedSystemPrompt {
-  id: string;
-  title: string;
-  prompt: string;
-}
-
-interface Chat {
-  id: number;
-  title: string;
-  date: string;
-  system_prompt: string | null;
-  project?: number;
-  user: number;
-}
+import { Message, Attachment, SavedSystemPrompt, Chat } from "@/types/chat";
 
 const useChat = (chatId: string) => {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -44,8 +18,58 @@ const useChat = (chatId: string) => {
   >([]);
   const [isLoadingAttachments, setIsLoadingAttachments] = useState(false);
   const [chat, setChat] = useState<Chat | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [previewUrls, setPreviewUrls] = useState<Map<string, string>>(
+    new Map()
+  );
+  const [isUploading, setIsUploading] = useState(false);
+
+  const handleFileSelect = useCallback(async (files: File[]) => {
+    // Convert FileList to Array if needed
+    const fileArray = Array.from(files);
+    try {
+      setIsUploading(true);
+      setSelectedFiles((prev) => [...prev, ...fileArray]);
+
+      // Process previews for images
+      fileArray.forEach((file) => {
+        if (file.type.startsWith("image/")) {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            setPreviewUrls((prev) =>
+              new Map(prev).set(file.name, reader.result as string)
+            );
+          };
+          reader.readAsDataURL(file);
+        }
+      });
+    } finally {
+      setIsUploading(false);
+    }
+  }, []);
+
+  const handleRemoveFile = useCallback((fileToRemove: File) => {
+    setSelectedFiles((prev) => prev.filter((f) => f !== fileToRemove));
+    setPreviewUrls((prev) => {
+      const newUrls = new Map(prev);
+      newUrls.delete(fileToRemove.name);
+      return newUrls;
+    });
+  }, []);
+
+  const clearFiles = useCallback(() => {
+    setSelectedFiles([]);
+    previewUrls.forEach((url) => URL.revokeObjectURL(url));
+    setPreviewUrls(new Map());
+  }, [previewUrls]);
+
   const navigate = useNavigate();
   const fetchMessages = useCallback(async () => {
+    if (chatId === "new") {
+      setMessages([]);
+      setSystemPrompt("");
+      return;
+    }
     try {
       const response = await axios.get(urls.chatMessages(chatId), {
         headers: { Authorization: `Token ${token}` },
@@ -62,6 +86,10 @@ const useChat = (chatId: string) => {
 
   const fetchAttachments = useCallback(async () => {
     setIsLoadingAttachments(true);
+    if (chatId === "new") {
+      setAttachments([]);
+      return;
+    }
     try {
       const response = await axios.get(urls.attachments(chatId), {
         headers: { Authorization: `token ${token}` },
@@ -101,7 +129,7 @@ const useChat = (chatId: string) => {
     }
 
     try {
-      const response = await axios.get(urls.chat(chatId), {
+      const response = await axios.get(urls.chatDetail(chatId), {
         headers: { Authorization: `Token ${token}` },
       });
       setChat(response.data);
@@ -128,26 +156,42 @@ const useChat = (chatId: string) => {
   }, [chatId, fetchMessages, fetchAttachments, fetchSavedSystemPrompts]);
 
   const handleSubmit = useCallback(
-    async (
-      e: React.FormEvent,
-      {
-        attachedFileIds,
-        projectId,
-      }: {
-        attachedFileIds: string[];
-        projectId: number | undefined;
-      }
-    ) => {
-      e.preventDefault();
-      if (!newMessage.trim() && attachedFileIds.length === 0) {
+    async ({
+      messageText,
+      projectId,
+    }: {
+      messageText: string;
+      projectId?: string;
+    }) => {
+      if (!messageText.trim() && selectedFiles.length === 0) {
         setError("Please enter a message or attach a file.");
-        toast.error(`Please enter a message or attach a file. ${newMessage}`);
-
+        toast.error("Please enter a message or attach a file.");
         return;
       }
 
-      const userMessage = { role: "user", content: newMessage };
-      setMessages((prevMessages) => [...prevMessages, userMessage]);
+      const formData = new FormData();
+      formData.append("message", messageText);
+      formData.append("chat_id", chatId || "new");
+      if (projectId) {
+        formData.append("project_id", projectId);
+      }
+
+      if (systemPrompt) {
+        formData.append("system_prompt", systemPrompt);
+      }
+
+      selectedFiles.forEach((file) => {
+        formData.append("files", file);
+      });
+
+      // Add message to UI immediately
+      const userMessage: Message = {
+        role: "user",
+        content: messageText,
+        type: "text",
+      };
+
+      setMessages((prev) => [...prev, userMessage]);
       setNewMessage("");
       setIsStreaming(true);
       setError(null);
@@ -156,32 +200,42 @@ const useChat = (chatId: string) => {
         const response = await fetch(urls.claude, {
           method: "POST",
           headers: {
-            Authorization: `token ${token}`,
-            "Content-Type": "application/json",
-            Accept: "application/json, text/plain, */*",
+            Authorization: `Token ${token}`,
           },
-          body: JSON.stringify({
-            chat_id: chatId,
-            message: newMessage,
-            attachment_ids: attachedFileIds,
-            project_id: projectId,
-            system_prompt: systemPrompt,
-          }),
+          body: formData,
         });
 
-        if (!response.ok || !response.body) {
-          throw new Error(response.statusText);
+        if (!response.ok) {
+          console.log("response", response);
+          // Check if the response is JSON
+          const contentType = response.headers.get("content-type");
+          if (contentType && contentType.includes("application/json")) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || "An error occurred");
+          } else {
+            // Fallback for non-JSON errors
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
         }
 
         let assistantMessage = "";
-        const reader = response.body.getReader();
+        const reader = response.body?.getReader();
         const decoder = new TextDecoder();
 
-        while (true) {
+        if (!reader) {
+          throw new Error("Response body is null");
+        }
+
+        let shouldContinue = true;
+        while (shouldContinue) {
           const { done, value } = await reader.read();
-          if (done) break;
+          if (done) {
+            shouldContinue = false;
+            break;
+          }
           const chunk = decoder.decode(value);
           const lines = chunk.split("\n");
+
           lines.forEach((line) => {
             if (line.trim() !== "") {
               try {
@@ -190,7 +244,11 @@ const useChat = (chatId: string) => {
                   assistantMessage += parsed.content;
                   setMessages((prevMessages) => [
                     ...prevMessages.slice(0, -1),
-                    { role: "assistant", content: assistantMessage },
+                    {
+                      role: "assistant",
+                      content: assistantMessage,
+                      type: "text",
+                    },
                   ]);
                 } else if (parsed.type === "chat_id") {
                   navigate(`/chat/${parsed.content}`);
@@ -207,9 +265,10 @@ const useChat = (chatId: string) => {
         toast.error("Failed to send message");
       } finally {
         setIsStreaming(false);
+        clearFiles(); // Clear files after successful submission
       }
     },
-    [chatId, newMessage, navigate, systemPrompt]
+    [chatId, systemPrompt, selectedFiles, clearFiles, navigate]
   );
 
   const handleAttachment = useCallback(
@@ -309,6 +368,12 @@ const useChat = (chatId: string) => {
     handleUpdateSystemPrompt,
     refreshAttachments,
     chat,
+    selectedFiles,
+    previewUrls,
+    isUploading,
+    handleFileSelect,
+    handleRemoveFile,
+    clearFiles,
   };
 };
 

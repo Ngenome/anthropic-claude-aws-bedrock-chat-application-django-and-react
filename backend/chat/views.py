@@ -32,44 +32,73 @@ CLAUDE_35_SONNET_V2 = "anthropic.claude-3-5-sonnet-20241022-v2:0"
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def claude_chat_view(request):
+    print("request", "I got a request")
     chat_service = ChatService()
 
-    # Extract request data
-    chat_id = request.data.get('chat_id')
-    message_text = request.data.get('message')
-    project_id = request.data.get('project_id')
-    attachment_ids = request.data.get('attachment_ids', [])
-    
+    # Validate required fields
+    if not request.data.get('message') and not request.FILES:
+        print("error, no message or files")
+        return Response(
+            {'error': 'Either message or files must be provided'}, 
+            status=400
+        )
+
     try:
+        # Extract request data
+        chat_id = request.data.get('chat_id')
+        message_text = request.data.get('message', '')
+        project_id = request.data.get('project_id')
+        files = request.FILES.getlist('files', [])
+        system_prompt = request.data.get('system_prompt', '')
+        
         # Create or get existing chat
         chat = chat_service.create_or_get_chat(request.user, chat_id, message_text, project_id)
         
-        # Create message pair and user message
+        # Create message pair
         message_pair = MessagePair.objects.create(chat=chat)
-        Message.objects.create(
-            message_pair=message_pair,
-            role="user",
-            text=message_text,
-            type='text'
-        )
+        
+        # Create user message with files
+        for file in files:
+            message_type = 'image' if file.content_type.startswith('image/') else 'file'
+            message = Message.objects.create(
+                message_pair=message_pair,
+                role="user",
+                type=message_type,
+                text=message_text if message_type == 'text' else None,
+                image=file if message_type == 'image' else None,
+                file=file if message_type == 'file' else None,
+                file_type=file.content_type
+            )
+        
+        # Create text message if there's text content
+        if message_text and not files:
+            Message.objects.create(
+                message_pair=message_pair,
+                role="user",
+                type='text',
+                text=message_text
+            )
 
         # Prepare message history with context
-        messages = chat_service.prepare_message_history(chat, message_text, attachment_ids)
+        messages = chat_service.prepare_message_history(chat, message_text, files)
         
         # Create request body and invoke model
         body = chat_service.create_chat_request_body(messages, chat)
         
         assistant_response_text = []
+        print("body", body)
         def stream_response(response):
             for chunk in response['body']:
                 chunk_data = json.loads(chunk['chunk']['bytes'].decode())
                 if chunk_data['type'] == 'content_block_delta':
                     content = chunk_data['delta']['text']
+                    print(content)
                     assistant_response_text.append(content)
                     yield json.dumps({'type': 'text', 'content': content}) + '\n'
-            
+            print("assistant_response_text", assistant_response_text)
             # Save complete response
             complete_response = ''.join(assistant_response_text)
+            print("complete_response", complete_response)
             Message.objects.create(
                 message_pair=message_pair,
                 role="assistant",
@@ -79,15 +108,26 @@ def claude_chat_view(request):
             yield json.dumps({'type': 'chat_id', 'content': str(chat.id)}) + '\n'
 
         response = chat_service.invoke_model(body)
+        print("response", response)
+
         return StreamingHttpResponse(stream_response(response), content_type='text/event-stream')
 
-    except Project.DoesNotExist:
-        return Response({'error': 'Project not found'}, status=404)
     except Chat.DoesNotExist:
-        return Response({'error': 'Chat not found'}, status=404)
+        return Response(
+            {'error': 'Chat not found'}, 
+            status=404
+        )
+    except ValueError as e:
+        return Response(
+            {'error': str(e)}, 
+            status=400
+        )
     except Exception as e:
-        print(e)
-        return Response({'error': str(e)}, status=500)
+        print(f"Error in claude_chat_view: {str(e)}")
+        return Response(
+            {'error': f'An unexpected error occurred: {str(e)}'}, 
+            status=500
+        )
 
 class ChatMessagesListView(generics.ListCreateAPIView):
     serializer_class = MessageSerializer
@@ -95,7 +135,7 @@ class ChatMessagesListView(generics.ListCreateAPIView):
 
     def get_queryset(self):
         chat_id = self.kwargs['chat_id']
-        message_pairs = MessagePair.objects.filter(chat_id=chat_id).order_by('-created_at')
+        message_pairs = MessagePair.objects.filter(chat_id=chat_id).order_by('created_at')
         messages = []
         for pair in message_pairs:
             messages.extend(pair.messages.all())

@@ -14,37 +14,35 @@ export interface User {
 
 // Message related types
 export interface Message {
-  id: string;
+  id?: string;
   role: "user" | "assistant";
   content: string;
-  type?: "text" | "image";
-  image?: string;
-  text?: string;
-  token_count: number;
+  type: "text" | "image" | "file";
+  timestamp?: string;
+  edited_at?: string | null;
+  message_pair?: string;
   hidden?: boolean;
-  edited_at?: string;
-  original_text?: string;
-  created_at: string;
-  is_archived?: boolean;
-  message_pair: string;
+  file?: {
+    url: string;
+    name: string;
+    type: string;
+  };
 }
 
-export interface MessagePair extends BaseModel {
-  id: number;
+export interface MessagePair {
+  id: string;
   messages: Message[];
-  chat: number;
+  hidden?: boolean;
 }
 
 // Chat related types
-export interface Chat extends BaseModel {
+export interface Chat {
   id: number;
-  uuid: string;
   title: string;
-  user: number;
+  created_at: string;
+  system_prompt: string | null;
   project?: number;
-  system_prompt?: string;
-  is_archived?: boolean;
-  total_tokens?: number;
+  user: number;
 }
 
 // Project related types

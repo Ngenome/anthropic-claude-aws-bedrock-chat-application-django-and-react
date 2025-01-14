@@ -16,33 +16,43 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "./ui/tooltip";
+import { FileUploader } from "./FileUploader";
+import { FilePreview } from "./FilePreview";
+import { toast } from "sonner";
 
 interface ChatInputProps {
-  onSubmit: (e: React.FormEvent) => Promise<void>;
+  onSubmit: ({
+    messageText,
+    projectId,
+  }: {
+    messageText: string;
+    projectId?: string;
+  }) => Promise<void>;
   newMessage: string;
   setNewMessage: (message: string) => void;
   isStreaming: boolean;
+  selectedFiles?: File[];
+  setSelectedFiles?: React.Dispatch<React.SetStateAction<File[]>>;
+  projectId?: string;
 }
 
 export const ChatInput = React.memo(
-  ({ onSubmit, newMessage, setNewMessage, isStreaming }: ChatInputProps) => {
+  ({
+    onSubmit,
+    newMessage,
+    setNewMessage,
+    isStreaming,
+    selectedFiles: selectedFilesProp = [],
+    setSelectedFiles: setSelectedFilesProp,
+    projectId,
+  }: ChatInputProps) => {
     const [isFullScreen, setIsFullScreen] = useState(false);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const [isRecording, setIsRecording] = useState(false);
-
-    const handleKeyDown = useCallback(
-      (e: React.KeyboardEvent) => {
-        if (e.key === "Enter") {
-          if (!isFullScreen && !e.shiftKey) {
-            e.preventDefault();
-            if (newMessage.trim()) {
-              onSubmit(e);
-            }
-          }
-        }
-      },
-      [isFullScreen, newMessage, onSubmit]
+    const [previewUrls, setPreviewUrls] = useState<Map<string, string>>(
+      new Map()
     );
+    const [isUploading, setIsUploading] = useState(false);
 
     const adjustTextareaHeight = useCallback(() => {
       const textarea = textareaRef.current;
@@ -83,6 +93,116 @@ export const ChatInput = React.memo(
       // Implement voice recording logic here
     };
 
+    const handleFileSelect = useCallback(
+      async (files: FileList | File[]) => {
+        try {
+          setIsUploading(true);
+
+          if (setSelectedFilesProp) {
+            // Convert FileList to Array if needed
+            const fileArray = Array.from(files);
+            setSelectedFilesProp((prev) => [...prev, ...fileArray]);
+
+            // Process previews for images
+            fileArray.forEach((file) => {
+              if (file.type.startsWith("image/")) {
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                  setPreviewUrls((prev) =>
+                    new Map(prev).set(file.name, reader.result as string)
+                  );
+                };
+                reader.readAsDataURL(file);
+              }
+            });
+          }
+        } finally {
+          setIsUploading(false);
+        }
+      },
+      [setSelectedFilesProp]
+    );
+
+    const handleRemoveFile = useCallback(
+      (fileToRemove: File) => {
+        if (setSelectedFilesProp) {
+          setSelectedFilesProp(
+            selectedFilesProp.filter((f) => f !== fileToRemove)
+          );
+          setPreviewUrls((prev) => {
+            const newUrls = new Map(prev);
+            newUrls.delete(fileToRemove.name);
+            return newUrls;
+          });
+        }
+      },
+      [selectedFilesProp, setSelectedFilesProp]
+    );
+
+    const handleSubmit = useCallback(
+      async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!newMessage.trim() && selectedFilesProp.length === 0) return;
+
+        try {
+          await onSubmit({
+            messageText: newMessage,
+            projectId: projectId,
+          });
+        } catch (error) {
+          console.error("Error sending message:", error);
+          toast.error("Failed to send message");
+        }
+      },
+      [newMessage, onSubmit, selectedFilesProp, projectId]
+    );
+
+    const clearPreviewUrls = () => {
+      previewUrls.forEach((url) => URL.revokeObjectURL(url));
+      setPreviewUrls(new Map());
+    };
+
+    const handleKeyDown = useCallback(
+      (e: React.KeyboardEvent) => {
+        if (e.key === "Enter") {
+          if (!isFullScreen && !e.shiftKey) {
+            e.preventDefault();
+            if (newMessage.trim()) {
+              handleSubmit(e);
+            }
+          }
+        }
+      },
+      [isFullScreen, newMessage, handleSubmit]
+    );
+
+    const renderFilePreviews = () => (
+      <div className="flex gap-2 flex-wrap mt-2">
+        {selectedFilesProp.map((file, index) => (
+          <FilePreview
+            key={`${file.name}-${index}`}
+            file={file}
+            previewUrl={previewUrls.get(file.name)}
+            onRemove={() => {
+              if (setSelectedFilesProp) {
+                setSelectedFilesProp(
+                  selectedFilesProp.filter((_, i) => i !== index)
+                );
+                if (previewUrls.has(file.name)) {
+                  URL.revokeObjectURL(previewUrls.get(file.name)!);
+                  setPreviewUrls((prev) => {
+                    const newMap = new Map(prev);
+                    newMap.delete(file.name);
+                    return newMap;
+                  });
+                }
+              }
+            }}
+          />
+        ))}
+      </div>
+    );
+
     return (
       <div
         className={`relative transition-all duration-300 ease-in-out ${
@@ -99,7 +219,7 @@ export const ChatInput = React.memo(
           }`}
         >
           <form
-            onSubmit={onSubmit}
+            onSubmit={handleSubmit}
             className={`relative max-w-3xl mx-auto ${
               isFullScreen ? "flex flex-col space-y-4" : ""
             }`}
@@ -119,6 +239,7 @@ export const ChatInput = React.memo(
                   </Button>
                 </div>
               )}
+              {renderFilePreviews()}
               <Textarea
                 ref={textareaRef}
                 value={newMessage}
@@ -144,6 +265,11 @@ export const ChatInput = React.memo(
                 }`}
               >
                 <div className="flex items-center space-x-2">
+                  <FileUploader
+                    onFileSelect={handleFileSelect}
+                    isLoading={isUploading}
+                    existingFiles={selectedFilesProp}
+                  />
                   <TooltipProvider delayDuration={300}>
                     {!isFullScreen && (
                       <Tooltip>

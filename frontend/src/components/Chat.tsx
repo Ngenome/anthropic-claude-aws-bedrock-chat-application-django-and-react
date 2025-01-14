@@ -16,6 +16,8 @@ import axios from "axios";
 import urls from "@/constants/urls";
 import { Message } from "@/types/chat";
 import token from "@/constants/token";
+import { FileUploader } from "./FileUploader";
+import { ImagePreview } from "./ImagePreview";
 
 const MessageList = React.memo(
   ({
@@ -119,6 +121,9 @@ export default function Chat() {
     setNewMessage,
     chat,
     fetchMessages,
+    selectedFiles,
+    handleFileSelect,
+    handleRemoveFile,
   } = useChat(chatId || "new");
   const { data: tokenStats } = useChatTokens(chatId);
   const { data: project } = useProject(chat?.project?.toString() || "");
@@ -136,22 +141,6 @@ export default function Chat() {
     }
   }, [error]);
 
-  const onSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newMessage.trim() || isStreaming) return;
-
-    try {
-      await handleSubmit(e, {
-        attachedFileIds: [],
-        projectId: projectId ? parseInt(projectId) : undefined,
-      });
-      setNewMessage("");
-    } catch (error) {
-      console.error("Failed to send message:", error);
-      toast.error("Failed to send message. Please try again.");
-    }
-  };
-
   const handleEditMessage = async (messageId: string, newText: string) => {
     // if message ID is undefined, show a toast
     if (!messageId) {
@@ -168,10 +157,10 @@ export default function Chat() {
       // If this was a user message, we need to get a new response
       const message = messages.find((m) => m.id === messageId);
       if (message?.role === "user") {
-        await handleSubmit(new Event("submit") as any, {
-          editedMessageId: messageId,
-          attachedFileIds: [],
-        });
+        // await handleSubmit(new Event("submit") as any, {
+        //   editedMessageId: messageId,
+        //   attachedFileIds: [],
+        // });
       }
 
       // Refresh messages
@@ -248,10 +237,13 @@ export default function Chat() {
       <div className="flex-none p-4 bg-background border-t border-border">
         <div className="max-w-3xl mx-auto">
           <ChatInput
-            onSubmit={onSubmit}
+            onSubmit={handleSubmit}
             newMessage={newMessage}
             setNewMessage={setNewMessage}
             isStreaming={isStreaming}
+            selectedFiles={selectedFiles}
+            setSelectedFiles={handleFileSelect}
+            projectId={projectId || undefined}
           />
           <div className="mt-2 text-xs text-center text-muted-foreground">
             This chatbot can make mistakes. Consider checking important

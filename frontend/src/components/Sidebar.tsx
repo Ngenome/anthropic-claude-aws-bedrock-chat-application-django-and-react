@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -78,7 +78,7 @@ export function Sidebar() {
   // Delete chat mutation
   const deleteChatMutation = useMutation({
     mutationFn: async (chatId: number) => {
-      await axios.delete(urls.chat(chatId.toString()), {
+      await axios.delete(urls.chatDetail(chatId.toString()), {
         headers: { Authorization: `token ${token}` },
       });
     },
@@ -102,7 +102,7 @@ export function Sidebar() {
       title: string;
     }) => {
       await axios.patch(
-        urls.chat(chatId.toString()),
+        urls.chatDetail(chatId.toString()),
         { title },
         { headers: { Authorization: `token ${token}` } }
       );
@@ -303,7 +303,10 @@ export function Sidebar() {
                 asChild
               >
                 <Link to={`/projects/${project.id}`}>
-                  <span className="truncate">{project.name}</span>
+                  <span className="truncate">
+                    {project.name.slice(0, 15) +
+                      (project.name.length > 15 ? "..." : "")}
+                  </span>
                 </Link>
               </Button>
             ))}

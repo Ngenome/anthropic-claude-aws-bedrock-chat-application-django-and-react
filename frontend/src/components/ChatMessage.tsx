@@ -14,6 +14,8 @@ import {
   Maximize2,
   ChevronDown,
   ChevronRight,
+  FileIcon,
+  ImageIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 import { UserIcon, BotIcon } from "lucide-react";
@@ -109,6 +111,46 @@ const MessageTimestamp = React.memo(
 
 MessageTimestamp.displayName = "MessageTimestamp";
 
+const MessageContent = ({ message }: { message: Message }) => {
+  switch (message.type) {
+    case "image":
+      return (
+        <div className="mt-2">
+          <img
+            src={message.content}
+            alt="Uploaded image"
+            className="max-w-full rounded-lg"
+            style={{ maxHeight: "400px" }}
+          />
+        </div>
+      );
+
+    case "file":
+      return (
+        <div className="mt-2 flex items-center gap-2 p-2 bg-muted rounded-lg">
+          <FileIcon className="h-4 w-4" />
+          <span className="text-sm">{message.content}</span>
+        </div>
+      );
+
+    default:
+      return (
+        <Markdown
+          remarkPlugins={[remarkGfm]}
+          components={{
+            code({ className, children }) {
+              const code = String(children).replace(/\n$/, "");
+              const language = className?.replace("language-", "");
+              return <CodeBlock language={language}>{code}</CodeBlock>;
+            },
+          }}
+        >
+          {message.content}
+        </Markdown>
+      );
+  }
+};
+
 export const UserMessage = React.memo(
   ({ message, onEdit, onDelete, onToggle, isHidden }: ChatMessageProps) => {
     const [isEditing, setIsEditing] = useState(false);
@@ -155,43 +197,17 @@ export const UserMessage = React.memo(
           </div>
           <div className="flex-1">
             <div className="relative group prose dark:prose-invert max-w-none">
-              {isEditing ? (
-                <div className="flex flex-col gap-2">
-                  <Textarea
-                    value={editedContent}
-                    onChange={(e) => setEditedContent(e.target.value)}
-                    className="min-h-[100px]"
-                  />
-                  <div className="flex gap-2">
-                    <Button size="sm" onClick={handleSaveEdit}>
-                      <Check className="h-4 w-4 mr-2" />
-                      Save
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => setIsEditing(false)}
-                    >
-                      <X className="h-4 w-4 mr-2" />
-                      Cancel
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  <div className="text-foreground">{message.content}</div>
-                  <MessageControls
-                    isEditing={isEditing}
-                    setIsEditing={setIsEditing}
-                    onDelete={handleDelete}
-                    onToggle={handleToggle}
-                    isHidden={isHidden}
-                    message={message}
-                    copied={copied}
-                    onCopy={copyToClipboard}
-                  />
-                </>
-              )}
+              <MessageContent message={message} />
+              <MessageControls
+                isEditing={isEditing}
+                setIsEditing={setIsEditing}
+                onDelete={handleDelete}
+                onToggle={handleToggle}
+                isHidden={isHidden}
+                message={message}
+                copied={copied}
+                onCopy={copyToClipboard}
+              />
             </div>
             <MessageTimestamp
               timestamp={message.timestamp}

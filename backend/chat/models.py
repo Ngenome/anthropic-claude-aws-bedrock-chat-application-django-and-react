@@ -93,18 +93,49 @@ class Message(models.Model):
     TYPE_CHOICES = (
         ("text", "text"),
         ("image", "image"),
+        ("file", "file"),
     )
     type = models.CharField(max_length=10, choices=TYPE_CHOICES, default="text")
+    text = models.TextField(blank=True, null=True)
     image = models.ImageField(upload_to='chat/images/', null=True, blank=True)
-    text = models.TextField()
+    file = models.FileField(upload_to='chat/files/', null=True, blank=True)
+    file_type = models.CharField(max_length=50, blank=True, null=True)  # For storing MIME type
     token_count = models.IntegerField(default=0)
     hidden = models.BooleanField(default=False)
     edited_at = models.DateTimeField(auto_now=True, null=True)
     original_text = models.TextField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     is_archived = models.BooleanField(default=False)
+
     def __str__(self):
         return f"{self.role} message in {self.message_pair}"
+
+    def get_content(self):
+        """Return content in the format expected by Claude API"""
+        content = []
+        
+        # Add image if present
+        if self.type == 'image' and self.image:
+            import base64
+            with open(self.image.path, 'rb') as img_file:
+                encoded_image = base64.b64encode(img_file.read()).decode('utf-8')
+                content.append({
+                    'type': 'image',
+                    'source': {
+                        'type': 'base64',
+                        'media_type': 'image/jpeg',
+                        'data': encoded_image
+                    }
+                })
+        
+        # Add text content
+        if self.text:
+            content.append({
+                'type': 'text',
+                'text': self.text
+            })
+            
+        return content
 
     def save(self, *args, **kwargs):
         if not self.token_count:
