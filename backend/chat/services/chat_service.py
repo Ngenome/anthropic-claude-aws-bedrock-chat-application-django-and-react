@@ -4,13 +4,17 @@ import boto3
 import os
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AbstractUser
-from ..models import Chat, MessagePair, Message, Project, Attachment
-from ..file_handlers import get_file_contents
+from ..models import Chat, MessagePair, Message, Project, MessageContent
 from ..prompts.coding import get_coding_system_prompt
+from ..utils.file_validators import validate_image_size, validate_document_size, validate_mime_type
+from ..utils.token_counter import count_tokens
+from botocore.exceptions import ClientError
+from transformers import GPT2TokenizerFast
 User = get_user_model()
 
 class ChatService:
     CLAUDE_35_SONNET_V2 = "anthropic.claude-3-5-sonnet-20241022-v2:0"
+    CLAUDE_35_HAIKU_V1_0 = "anthropic.claude-3-5-haiku-20241022-v1:0"
 
     def __init__(self):
         self.bedrock_runtime = boto3.client(
@@ -25,11 +29,85 @@ class ChatService:
             return self._create_new_chat(user, message_text, project_id)
         return Chat.objects.get(id=chat_id, user=user)
 
+    def _generate_chat_title(self, message_text: str, project_context: str = "") -> str:
+        """
+        Generate a chat title using Claude 3.5 Haiku
+        Falls back to truncated message if generation fails
+        """
+        try:
+            # Prepare context for title generation
+            context = message_text
+            
+            # If we have project context, process it to stay within token limits
+            if project_context:
+                context_tokens = count_tokens(project_context)
+                if context_tokens > 5000:
+                    # Split into first 2k and last 2k tokens
+                    tokenizer = GPT2TokenizerFast.from_pretrained("Xenova/claude-tokenizer")
+                    tokens = tokenizer.encode(project_context)
+                    first_part = tokenizer.decode(tokens[:2000])
+                    last_part = tokenizer.decode(tokens[-2000:])
+                    project_context = f"{first_part}\n...\n{last_part}"
+                
+                context = f"{project_context}\n\nUser Question: {message_text}"
+
+            # Prepare the message for Claude
+            messages = [{
+                "role": "user",
+                "content": [{
+                    "type": "text",
+                    "text": f"Based on this context, generate a concise and descriptive title that is exactly 5 words or less. Respond with ONLY the title, no other text or explanation:\n\n{context}"
+                }]
+            }]
+
+            # Make the API call
+            body = json.dumps({
+                "anthropic_version": "bedrock-2023-05-31",
+                "max_tokens": 20,
+                "messages": messages
+            })
+
+            response = self.bedrock_runtime.invoke_model(
+                body=body,
+                modelId=self.CLAUDE_35_HAIKU_V1_0
+            )
+            
+            response_body = json.loads(response.get('body').read())
+            title = response_body.get('content')[0].get('text').strip()
+            
+            # Validate the title
+            if title and len(title.split()) <= 10:
+                return title
+
+        except (ClientError, Exception) as e:
+            print(f"Error generating title: {str(e)}")
+
+        # Fallback to truncated message
+        return message_text[:15] + "..."
+
     def _create_new_chat(self, user: AbstractUser, message_text: str, project_id: Optional[str]) -> Chat:
-        title = message_text[:15] + "..."
         project = None
+        project_context = ""
+        
         if project_id:
             project = Project.objects.get(id=project_id, user=user)
+            # Get project context for title generation
+            context_parts = []
+            if project.instructions:
+                context_parts.append(f"Project Instructions:\n{project.instructions}")
+
+            knowledge_items = project.knowledge_items.filter(include_in_chat=True)
+            if knowledge_items:
+                knowledge_text = "\n\n".join([
+                    f"### {item.title} ###\n{item.content}"
+                    for item in knowledge_items
+                ])
+                context_parts.append(f"Project Knowledge:\n{knowledge_text}")
+            
+            project_context = "\n\n".join(context_parts)
+
+        # Generate title using Claude
+        title = self._generate_chat_title(message_text, project_context)
             
         # Create chat with default coding system prompt
         chat = Chat.objects.create(
@@ -59,7 +137,10 @@ class ChatService:
 
         return "\n\n".join(context_parts)
 
-    def prepare_message_history(self, chat: Chat, message_text: str, attachment_ids: List[str]) -> List[Dict[str, Any]]:
+    def prepare_message_history(self, chat: Chat) -> List[Dict[str, Any]]:
+        """
+        Prepare message history in Claude API format
+        """
         messages = []
         
         # Add project context as a separate user message if exists
@@ -71,20 +152,14 @@ class ChatService:
             })
         
         # Build message history
-        messages.extend(self._build_message_history(chat))
-        
-        # Add file contents if any
-        file_contents = self._get_attachment_contents(attachment_ids)
-        file_context = ""
-        if file_contents:
-            file_context = f"<file_attachments>\n{self._format_file_contents(file_contents)}\n</file_attachments>\n\n"
-        
-        # Add current user message with appropriate tags
-        current_message = f"{file_context}<user_query>\n{message_text}\n</user_query>"
-        messages.append({
-            'role': 'user',
-            'content': [{'type': 'text', 'text': current_message}]
-        })
+        for pair in MessagePair.objects.filter(chat=chat).order_by('created_at'):
+            for message in pair.messages.all():
+                messages.append({
+                    'role': message.role,
+                    'content': message.get_content()  # This now returns content blocks as per Claude API
+                })
+
+
         
         return messages
 
@@ -101,56 +176,61 @@ class ChatService:
                 })
         return messages
 
-    def _get_attachment_contents(self, attachment_ids: List[str]) -> List[str]:
-        file_contents = []
-        for attachment_id in attachment_ids:
-            try:
-                attachment = Attachment.objects.get(id=attachment_id)
-                content = get_file_contents(attachment.file.path)
-                file_contents.append(f"File: {attachment.original_name}\n\n{content}\n\n")
-            except Attachment.DoesNotExist:
-                continue
-        return file_contents
 
-    def prepare_message_content(self, message_text: str, files: List[Any]) -> List[Dict[str, Any]]:
-        """Prepare message content with text and files"""
-        content = []
-        
-        # Handle image files
-        for file in files:
-            if file.content_type.startswith('image/'):
-                import base64
-                encoded_image = base64.b64encode(file.read()).decode('utf-8')
-                content.append({
-                    'type': 'image',
-                    'source': {
-                        'type': 'base64',
-                        'media_type': file.content_type,
-                        'data': encoded_image
-                    }
-                })
-        
-        # Add text content
-        if message_text:
-            content.append({
-                'type': 'text',
-                'text': message_text
-            })
-            
-        return content
+    def prepare_message_content(self, message: Message) -> List[Dict[str, Any]]:
+        """Prepare message content for Claude API"""
+
+        return message.get_content()
 
     def create_chat_request_body(self, messages: List[Dict[str, Any]], chat: Chat) -> str:
+        """
+        Create request body for Claude API
+        """
         system_prompt = get_coding_system_prompt(chat.system_prompt or "")
         
         return json.dumps({
-            "system": system_prompt,
             "anthropic_version": "bedrock-2023-05-31",
             "max_tokens": 4096,
-            "messages": messages
+            "system": system_prompt,
+            "messages": messages,
         })
 
     def invoke_model(self, body: str):
         return self.bedrock_runtime.invoke_model_with_response_stream(
             body=body,
             modelId=self.CLAUDE_35_SONNET_V2
-        ) 
+        )
+
+    def create_new_message(self, message_pair: MessagePair, role: str, text: str = None, files: list = None) -> Message:
+        """
+        Create a new message with optional file attachments using MessageContent model.
+        """
+        # Create the base message
+        message = Message.objects.create(
+            message_pair=message_pair,
+            role=role
+        )
+
+        # Add text content if provided
+        if text:
+            MessageContent.objects.create(
+                message=message,
+                content_type='text',
+                text_content=text
+            )
+
+        # Handle file attachments if any
+        if files:
+            for file in files:
+                # Determine content type based on mime type
+                mime_type = validate_mime_type(file)
+                content_type = 'image' if mime_type.startswith('image/') else 'document'
+                
+                MessageContent.objects.create(
+                    message=message,
+                    content_type=content_type,
+                    file_content=file,
+                    mime_type=mime_type
+                )
+
+        return message 

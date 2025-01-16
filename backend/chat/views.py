@@ -3,13 +3,11 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django.http import StreamingHttpResponse
 from rest_framework import generics, permissions
-from .models import Chat, MessagePair, Message, SavedSystemPrompt, Project, ProjectKnowledge
+from .models import Chat, MessagePair, Message, SavedSystemPrompt, Project, ProjectKnowledge, MessageContent
 from .serializers import ChatSerializer, MessageSerializer,SystemPromptSerializer, ProjectSerializer, ProjectKnowledgeSerializer
 import os
 import json
 import boto3
-from .file_handlers import handle_file_upload, get_file_contents, delete_attachment
-from .models import Attachment
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -17,6 +15,11 @@ from rest_framework import viewsets
 from rest_framework.decorators import action
 from .utils.token_counter import count_tokens,get_token_usage_stats
 from .services.chat_service import ChatService
+from .utils.file_validators import validate_image_size, validate_document_size, validate_mime_type
+from django.core.exceptions import ValidationError
+from rest_framework.pagination import PageNumberPagination
+from django.db.models import Q
+
 
 # Initialize Bedrock client
 bedrock_runtime = boto3.client(
@@ -27,107 +30,130 @@ bedrock_runtime = boto3.client(
 )   
 CLAUDE_35_SONNET_V1_0 = "anthropic.claude-3-5-sonnet-20240620-v1:0"
 CLAUDE_35_SONNET_V2 = "anthropic.claude-3-5-sonnet-20241022-v2:0"
+CLAUDE_35_HAIKU_V1_0 = "anthropic.claude-3-5-haiku-20241022-v1:0"
+
 
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def claude_chat_view(request):
-    print("request", "I got a request")
     chat_service = ChatService()
-
-    # Validate required fields
+    
     if not request.data.get('message') and not request.FILES:
-        print("error, no message or files")
         return Response(
             {'error': 'Either message or files must be provided'}, 
             status=400
         )
 
     try:
-        # Extract request data
         chat_id = request.data.get('chat_id')
         message_text = request.data.get('message', '')
         project_id = request.data.get('project_id')
         files = request.FILES.getlist('files', [])
-        system_prompt = request.data.get('system_prompt', '')
         
-        # Create or get existing chat
+        # Create or get chat
         chat = chat_service.create_or_get_chat(request.user, chat_id, message_text, project_id)
         
-        # Create message pair
+        # Create message pair and user message
         message_pair = MessagePair.objects.create(chat=chat)
-        
-        # Create user message with files
-        for file in files:
-            message_type = 'image' if file.content_type.startswith('image/') else 'file'
-            message = Message.objects.create(
-                message_pair=message_pair,
-                role="user",
-                type=message_type,
-                text=message_text if message_type == 'text' else None,
-                image=file if message_type == 'image' else None,
-                file=file if message_type == 'file' else None,
-                file_type=file.content_type
-            )
-        
-        # Create text message if there's text content
-        if message_text and not files:
-            Message.objects.create(
-                message_pair=message_pair,
-                role="user",
-                type='text',
-                text=message_text
-            )
+        user_message = chat_service.create_new_message(
+            message_pair=message_pair,
+            role="user",
+            text=message_text,
+            files=files
+        )
 
-        # Prepare message history with context
-        messages = chat_service.prepare_message_history(chat, message_text, files)
-        
-        # Create request body and invoke model
-        body = chat_service.create_chat_request_body(messages, chat)
-        
-        assistant_response_text = []
-        print("body", body)
+        # Send initial message data including file contents
         def stream_response(response):
+            # Send user message data
+            user_message_data = {
+                'type': 'message',
+                'message': {
+                    'id': str(user_message.id),
+                    'role': 'user',
+                    'contents': [{
+                        'id': str(content.id),
+                        'content_type': content.content_type,
+                        'text_content': content.text_content,
+                        'file_content': request.build_absolute_uri(content.file_content.url) if content.file_content else None,
+                        'mime_type': content.mime_type,
+                        'created_at': content.created_at.isoformat(),
+                        'edited_at': content.edited_at.isoformat() if content.edited_at else None
+                    } for content in user_message.contents.all()],
+                    'created_at': user_message.created_at.isoformat(),
+                    'message_pair': str(message_pair.id)
+                }
+            }
+            yield json.dumps(user_message_data) + '\n'
+
+            # Create initial assistant message with empty text content
+            assistant_message = chat_service.create_new_message(
+                message_pair=message_pair,
+                role="assistant",
+                text=""  # Initialize with empty text
+            )
+            
+            # Create initial text content for assistant message
+            assistant_content = MessageContent.objects.create(
+                message=assistant_message,
+                content_type='text',
+                text_content=''
+            )
+            
+            # Send initial assistant message data
+            assistant_init_data = {
+                'type': 'message',
+                'message': {
+                    'id': str(assistant_message.id),
+                    'role': 'assistant',
+                    'contents': [{
+                        'id': str(assistant_content.id),
+                        'content_type': 'text',
+                        'text_content': '',
+                        'created_at': assistant_content.created_at.isoformat()
+                    }],
+                    'created_at': assistant_message.created_at.isoformat(),
+                    'message_pair': str(message_pair.id)
+                }
+            }
+            yield json.dumps(assistant_init_data) + '\n'
+
+            # Stream the assistant's response
+            current_text = ""
+            
             for chunk in response['body']:
                 chunk_data = json.loads(chunk['chunk']['bytes'].decode())
                 if chunk_data['type'] == 'content_block_delta':
                     content = chunk_data['delta']['text']
-                    print(content)
-                    assistant_response_text.append(content)
-                    yield json.dumps({'type': 'text', 'content': content}) + '\n'
-            print("assistant_response_text", assistant_response_text)
-            # Save complete response
-            complete_response = ''.join(assistant_response_text)
-            print("complete_response", complete_response)
-            Message.objects.create(
-                message_pair=message_pair,
-                role="assistant",
-                text=complete_response,
-                type='text'
-            )
-            yield json.dumps({'type': 'chat_id', 'content': str(chat.id)}) + '\n'
+                    current_text += content
+                    # Update the message content in the database
+                    assistant_content.text_content = current_text
+                    assistant_content.save()
+                    
+                    yield json.dumps({
+                        'type': 'content',
+                        'message_id': str(assistant_message.id),
+                        'content': content
+                    }) + '\n'
 
+            # Send chat ID at the end
+            yield json.dumps({
+                'type': 'chat_id',
+                'content': str(chat.id)
+            }) + '\n'
+
+        # Prepare messages for Claude
+        messages = chat_service.prepare_message_history(chat)
+        body = chat_service.create_chat_request_body(messages, chat)
         response = chat_service.invoke_model(body)
-        print("response", response)
 
-        return StreamingHttpResponse(stream_response(response), content_type='text/event-stream')
+        return StreamingHttpResponse(
+            stream_response(response),
+            content_type='text/event-stream'
+        )
 
-    except Chat.DoesNotExist:
-        return Response(
-            {'error': 'Chat not found'}, 
-            status=404
-        )
-    except ValueError as e:
-        return Response(
-            {'error': str(e)}, 
-            status=400
-        )
     except Exception as e:
-        print(f"Error in claude_chat_view: {str(e)}")
-        return Response(
-            {'error': f'An unexpected error occurred: {str(e)}'}, 
-            status=500
-        )
+        raise e
 
 class ChatMessagesListView(generics.ListCreateAPIView):
     serializer_class = MessageSerializer
@@ -145,19 +171,33 @@ class ChatMessagesListView(generics.ListCreateAPIView):
         queryset = self.get_queryset()
         serializer = self.get_serializer(queryset, many=True)
         chat = Chat.objects.get(id=self.kwargs['chat_id'])
+        
+        messages = []
+        for message in serializer.data:
+            message_contents = []
+            for content in message['contents']:
+                message_contents.append({
+                    'id': content['id'],
+                    'content_type': content['content_type'],
+                    'text_content': content['text_content'],
+                    'file_content': content['file_content'],
+                    'mime_type': content['mime_type'],
+                    'edited_at': content['edited_at'],
+                    'created_at': content['created_at']
+                })
+
+            messages.append({
+                'id': message['id'],
+                'role': message['role'],
+                'contents': message_contents,
+                'created_at': message['created_at'],
+                'message_pair': message['message_pair'],
+                'hidden': message['hidden']
+            })
+
         return Response({
             'system_prompt': chat.system_prompt,
-            'messages': [{
-                'id': message['id'],
-                'message_pair': message['message_pair'],
-                'chat': chat.id,
-                'hidden': message['hidden'],
-                'edited_at': message['edited_at'],
-                'original_text': message['original_text'],
-                'role': message['role'],
-                'type': message['type'],
-                'content': message['text'] if message['type'] == 'text' else message['image'],
-            } for message in serializer.data]
+            'messages': messages
         })
 
     def perform_create(self, serializer):
@@ -224,12 +264,21 @@ def chat_messages_view(request, chat_id):
     messages = []
     for pair in message_pairs:
         for message in pair.messages.all():
-            messages.append({ 
-                'role' : message.role,
-                'type' : message.type,
-                'text' : message.text if message.type == 'text' else None,
-                'image':  message.image if message.type == 'image' else None,
-                'created_at' : message.created_at
+            messages.append({
+                'id': message.id,
+                'role': message.role,
+                'contents': [{
+                    'id': content.id,
+                    'content_type': content.content_type,
+                    'text_content': content.text_content,
+                    'file_content': content.file_content.url if content.file_content else None,
+                    'mime_type': content.mime_type,
+                    'edited_at': content.edited_at,
+                    'created_at': content.created_at
+                } for content in message.contents.all()],
+                'created_at': message.created_at,
+                'message_pair': message.message_pair.id,
+                'hidden': message.hidden
             })
     return Response(messages)
 
@@ -274,57 +323,60 @@ def update_saved_system_prompt(request, prompt_id):
         return Response({'error': 'Saved system prompt not found'}, status=404)
     
 
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def upload_file(request, chat_id):
-    file = request.FILES.get('file')
-    if not file:
-        return Response({'error': 'No file provided'}, status=400)
-    
-    success = handle_file_upload(file, chat_id)
-    if success:
-        return Response({'message': 'File uploaded successfully'})
-    else:
-        return Response({'error': 'File upload failed'}, status=500)
+class StandardResultsSetPagination(PageNumberPagination):
+    page_size = 20
+    page_size_query_param = 'page_size'
+    max_page_size = 100
 
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def get_attachments(request, chat_id):
-    attachments = Attachment.objects.filter(chat_id=chat_id)
-    data = [{
-        'id': attachment.id,
-        'name': attachment.original_name,
-        'url': attachment.file.url
-    } for attachment in attachments]
-    return Response(data)
-
-@api_view(['DELETE'])
-@permission_classes([IsAuthenticated])
-def delete_attachment_view(request, attachment_id):
-    success = delete_attachment(attachment_id)
-    if success:
-        return Response({'message': 'Attachment deleted successfully'})
-    else:
-        return Response({'error': 'Failed to delete attachment'}, status=500)
-
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def get_file_content(request, attachment_id):
-    try:
-        attachment = Attachment.objects.get(id=attachment_id)
-        content = get_file_contents(attachment.file.path)
-        return Response({'content': content})
-    except Attachment.DoesNotExist:
-        return Response({'error': 'Attachment not found'}, status=404)
-    except Exception as e:
-        return Response({'error': str(e)}, status=500)
-
-class ProjectViewSet(viewsets.ModelViewSet):
-    serializer_class = ProjectSerializer
+class ChatViewSet(viewsets.ModelViewSet):
+    serializer_class = ChatSerializer
+    pagination_class = StandardResultsSetPagination
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return Project.objects.filter(user=self.request.user)
+        queryset = Chat.objects.filter(user=self.request.user)
+        search = self.request.query_params.get('search', None)
+        
+        if search:
+            queryset = queryset.filter(
+                Q(title__icontains=search) |
+                Q(message_pairs__messages__contents__text_content__icontains=search)
+            ).distinct()
+            
+        return queryset.order_by('-created_at')
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+    @action(detail=True, methods=['post'])
+    def archive(self, request, pk=None):
+        chat = self.get_object()
+        chat.is_archived = True
+        chat.save()
+        return Response({'status': 'chat archived'})
+
+    @action(detail=True, methods=['post'])
+    def unarchive(self, request, pk=None):
+        chat = self.get_object()
+        chat.is_archived = False
+        chat.save()
+        return Response({'status': 'chat unarchived'})
+
+class ProjectViewSet(viewsets.ModelViewSet):
+    serializer_class = ProjectSerializer
+    pagination_class = StandardResultsSetPagination
+
+    def get_queryset(self):
+        queryset = Project.objects.filter(user=self.request.user)
+        search = self.request.query_params.get('search', None)
+        
+        if search:
+            queryset = queryset.filter(
+                Q(name__icontains=search) |
+                Q(description__icontains=search)
+            )
+            
+        return queryset.order_by('-created_at')
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
@@ -462,3 +514,30 @@ def delete_message_pair(request, pair_id):
         return Response({'status': 'success'})
     except MessagePair.DoesNotExist:
         return Response({'error': 'Message pair not found'}, status=404)
+    
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def validate_file_view(request):
+    file = request.FILES.get('file')
+    if not file:
+        return Response({'error': 'No file provided'}, status=400)
+    
+    try:
+        mime_type = validate_mime_type(file)
+        
+        if mime_type.startswith('image/'):
+            validate_image_size(file)
+        else:
+            validate_document_size(file)
+            
+        return Response({
+            'valid': True,
+            'mime_type': mime_type
+        })
+    except ValidationError as e:
+        return Response({
+            'valid': False,
+            'error': str(e)
+        }, status=400)

@@ -1,12 +1,18 @@
 # serializers.py
-
 from rest_framework import serializers
-from .models import Chat, Message, MessagePair, SavedSystemPrompt, Project, ProjectKnowledge
+from .models import Chat, Message, MessagePair, SavedSystemPrompt, Project, ProjectKnowledge, MessageContent
+
+class MessageContentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MessageContent
+        fields = ['id', 'content_type', 'text_content', 'file_content', 'mime_type', 'edited_at', 'created_at']
 
 class MessageSerializer(serializers.ModelSerializer):
+    contents = MessageContentSerializer(many=True, read_only=True)
+    
     class Meta:
         model = Message
-        fields = '__all__'
+        fields = ['id', 'message_pair', 'role', 'contents', 'hidden', 'created_at', 'is_archived', 'token_count']
 
 class ChatSerializer(serializers.ModelSerializer):
     class Meta:
