@@ -1,72 +1,100 @@
 import React from "react";
 import { Highlight, themes } from "prism-react-renderer";
 import { Button } from "./ui/button";
-import { Copy, CheckCheck } from "lucide-react";
+import { Copy, CheckCheck, Maximize2 } from "lucide-react";
 import { toast } from "sonner";
 
 interface CodeBlockProps {
   children: string;
   className?: string;
+  onExpand?: () => void;
+  language: string;
+  showExpand?: boolean;
 }
 
-export const CodeBlock: React.FC<CodeBlockProps> = ({
-  children,
-  className,
-}) => {
-  const [copied, setCopied] = React.useState(false);
+export const CodeBlock: React.FC<CodeBlockProps> = React.memo(
+  ({
+    children,
+    className,
+    onExpand,
+    showExpand = false,
+    language: propLanguage,
+  }) => {
+    console.log(propLanguage);
+    const [copied, setCopied] = React.useState(false);
 
-  // Extract language from className (format: "language-javascript")
-  const language = className?.replace(/language-/, "") || "typescript";
+    // Extract language from className (format: "language-javascript")
+    // Extract language from className (format: "language-javascript")
+    const language =
+      propLanguage || className?.replace(/language-/, "") || "typescript";
 
-  const copyToClipboard = async () => {
-    try {
-      await navigator.clipboard.writeText(children);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-      toast.success("Code copied to clipboard");
-    } catch (err) {
-      toast.error("Failed to copy code");
-    }
-  };
+    const copyToClipboard = async () => {
+      try {
+        await navigator.clipboard.writeText(children);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+        toast.success("Code copied to clipboard");
+      } catch (err) {
+        toast.error("Failed to copy code");
+      }
+    };
 
-  return (
-    <div className="relative group max-w-[calc(100vw-2rem)] md:max-w-[calc(100vw-4rem)]">
-      <Button
-        variant="ghost"
-        size="sm"
-        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
-        onClick={copyToClipboard}
-      >
-        {copied ? (
-          <CheckCheck className="h-4 w-4" />
-        ) : (
-          <Copy className="h-4 w-4" />
-        )}
-      </Button>
-      <Highlight
-        theme={themes.vsDark}
-        code={children.trim()}
-        language={language}
-      >
-        {({ className, style, tokens, getLineProps, getTokenProps }) => (
-          <pre
-            className={`${className} p-4 rounded-lg overflow-x-auto whitespace-pre-wrap break-all`}
-            style={{
-              ...style,
-              maxWidth: "100%",
-            }}
-          >
-            {tokens.map((line, i) => (
-              <div key={i} {...getLineProps({ line })} className="break-words">
-                <span className="select-none opacity-50 mr-4">{i + 1}</span>
-                {line.map((token, key) => (
-                  <span key={key} {...getTokenProps({ token })} />
-                ))}
-              </div>
-            ))}
-          </pre>
-        )}
-      </Highlight>
-    </div>
-  );
-};
+    return (
+      <div className="contain-inline-size rounded-md border-[0.5px]  relative ">
+        <div className="sticky top-0 ">
+          <div className="absolute right-0 flex items-center ">
+            <div className="flex gap-2 bg-primary/40 rounded-sm">
+              <Button variant="ghost" size="sm" onClick={copyToClipboard}>
+                {copied ? (
+                  <CheckCheck className="h-4 w-4" />
+                ) : (
+                  <Copy className="h-4 w-4" />
+                )}
+              </Button>
+              {showExpand && onExpand && (
+                <Button variant="ghost" size="sm" onClick={onExpand}>
+                  <Maximize2 className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center justify-between px-4 py-2 border-b bg-muted">
+          <span className="text-sm text-muted-foreground">{language}</span>
+        </div>
+        <Highlight
+          theme={themes.vsDark}
+          code={children.trim()}
+          language={language}
+        >
+          {({ className, style, tokens, getLineProps, getTokenProps }) => (
+            <pre
+              className={`${className} p-4 overflow-x-auto whitespace-pre-wrap break-all`}
+              style={{
+                ...style,
+                maxWidth: "100%",
+                margin: 0,
+                borderRadius: 0,
+              }}
+            >
+              {tokens.map((line, i) => (
+                <div
+                  key={i}
+                  {...getLineProps({ line })}
+                  className="break-words"
+                >
+                  <span className="select-none opacity-50 mr-4">{i + 1}</span>
+                  {line.map((token, key) => (
+                    <span key={key} {...getTokenProps({ token })} />
+                  ))}
+                </div>
+              ))}
+            </pre>
+          )}
+        </Highlight>
+      </div>
+    );
+  }
+);
+
+CodeBlock.displayName = "CodeBlock";

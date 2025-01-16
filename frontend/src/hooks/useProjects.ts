@@ -29,7 +29,7 @@ interface CreateProjectData {
 }
 
 interface AddKnowledgeData {
-  project: number;
+  project: string;
   title: string;
   content: string;
 }
@@ -56,6 +56,9 @@ export function useProject(projectId: string) {
   return useQuery({
     queryKey: ["project", projectId],
     queryFn: async () => {
+      if (!projectId) {
+        return null;
+      }
       const response = await axios.get(urls.project(projectId), {
         headers: { Authorization: `token ${token}` },
       });
@@ -68,6 +71,9 @@ export function useProjectKnowledge(projectId: string) {
   return useQuery({
     queryKey: ["project-knowledge", projectId],
     queryFn: async () => {
+      if (!projectId) {
+        return null;
+      }
       const response = await axios.get(urls.projectKnowledge(projectId), {
         headers: { Authorization: `token ${token}` },
       });
@@ -80,6 +86,9 @@ export function useProjectChats(projectId: string) {
   return useQuery({
     queryKey: ["project-chats", projectId],
     queryFn: async () => {
+      if (!projectId) {
+        return null;
+      }
       const response = await axios.get(urls.projectChats(projectId), {
         headers: { Authorization: `token ${token}` },
       });

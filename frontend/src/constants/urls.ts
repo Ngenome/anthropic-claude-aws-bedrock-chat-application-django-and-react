@@ -6,7 +6,7 @@ const urls = {
   chatMessages: (chatId: string) => `${BASE_URL}chats/${chatId}/messages/`,
   chatDetail: (chatId: string) => `${BASE_URL}chats/${chatId}/`,
   chatTokens: (chatId: string) => `${BASE_URL}chats/${chatId}/tokens/`,
-  claude: `${BASE_URL}claude/`,
+  chat: `${BASE_URL}chat/`,
   savedSystemPrompts: `${BASE_URL}saved-system-prompts/`,
   updateSystemPrompt: (chatId: string) =>
     `${BASE_URL}chats/${chatId}/system-prompt/`,
@@ -30,7 +30,8 @@ const urls = {
   deleteKnowledge: (knowledgeId: number) =>
     `${BASE_URL}knowledge/${knowledgeId}/`,
   editMessage: (messageId: string) => `${BASE_URL}messages/${messageId}/edit/`,
-  deleteMessagePair: (pairId: string) => `${BASE_URL}message-pairs/${pairId}/`,
+  deleteMessagePair: (pairId: string) =>
+    `${BASE_URL}message-pairs/${pairId}/delete/`,
   toggleMessagePair: (pairId: string) =>
     `${BASE_URL}message-pairs/${pairId}/toggle/`,
 };

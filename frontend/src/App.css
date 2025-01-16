@@ -56,3 +56,6 @@
     transform: scale(1);
   }
 }
+.scroll-container {
+  height: calc(100vh - 2rem);
+}

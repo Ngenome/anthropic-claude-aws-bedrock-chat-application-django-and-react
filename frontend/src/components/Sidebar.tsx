@@ -1,14 +1,18 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  useQuery,
+  useMutation,
+  useQueryClient,
+  useInfiniteQuery,
+} from "@tanstack/react-query";
 import axios from "axios";
 import token from "@/constants/token";
 import urls from "@/constants/urls";
 import {
   Plus,
-  FolderOpen,
   Loader2,
   Pencil,
   Trash2,
@@ -32,6 +36,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
+import { useDebounce } from "@/hooks/useDebounce";
 
 interface Chat {
   id: number;
@@ -52,26 +57,64 @@ export function Sidebar() {
   const [editingChatId, setEditingChatId] = useState<number | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [chatToDelete, setChatToDelete] = useState<number | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const debouncedSearch = useDebounce(searchQuery, 300);
 
-  // Fetch chats query
-  const { data: chats, isLoading } = useQuery({
-    queryKey: ["chats"],
-    queryFn: async () => {
-      const response = await axios.get<Chat[]>(urls.chats, {
+  // Replace existing chats query with infinite query
+  const {
+    data: chatsData,
+    isLoading,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery({
+    queryKey: ["chats", debouncedSearch],
+    queryFn: async ({ pageParam = 1 }) => {
+      const response = await axios.get<{
+        results: Chat[];
+        next: number | null;
+      }>(urls.chats, {
         headers: { Authorization: `token ${token}` },
+        params: {
+          page: pageParam,
+          search: debouncedSearch,
+          page_size: 20,
+        },
       });
       return response.data;
     },
+    getNextPageParam: (lastPage) => lastPage.next,
+    initialPageParam: 1,
   });
+
+  // Flatten chat pages into a single array
+  const chats = useMemo(() => {
+    return chatsData?.pages.flatMap((page) => page.results) ?? [];
+  }, [chatsData]);
+
+  // Handle scroll to load more
+  const handleScroll = useCallback(
+    (e: React.UIEvent<HTMLDivElement>) => {
+      const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+      if (scrollHeight - scrollTop <= clientHeight * 1.5) {
+        if (hasNextPage && !isFetchingNextPage) {
+          fetchNextPage();
+        }
+      }
+    },
+    [fetchNextPage, hasNextPage, isFetchingNextPage]
+  );
 
   // Fetch projects query
   const { data: projects } = useQuery({
     queryKey: ["projects"],
     queryFn: async () => {
-      const response = await axios.get<Project[]>(urls.projects, {
+      const response = await axios.get<{
+        results: Project[];
+      }>(urls.projects, {
         headers: { Authorization: `token ${token}` },
       });
-      return response.data;
+      return response.data.results;
     },
   });
 
@@ -275,17 +318,25 @@ export function Sidebar() {
   }, [currentUrl]);
 
   return (
-    <div className="w-64 h-screen border-r bg-background flex flex-col">
+    <div className="w-72 h-screen border-r bg-background flex flex-col">
       {/* Fixed Header Section */}
-      <div className="p-4 border-b">
+      <div className="p-4 space-y-4 border-b">
         <Button className="w-full" onClick={() => navigate("/chat/new")}>
           <Plus className="h-4 w-4 mr-2" />
           New Chat
         </Button>
+
+        {/* Add search input */}
+        <Input
+          placeholder="Search chats..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="w-full"
+        />
       </div>
 
       {/* Scrollable Content */}
-      <ScrollArea className="flex-1">
+      <ScrollArea className="flex-1" onScroll={handleScroll}>
         <div className="p-4 space-y-6">
           {/* Projects Section */}
           <div className="space-y-1">
@@ -354,6 +405,13 @@ export function Sidebar() {
                     chats={categorizedChats.older}
                   />
                 )}
+
+                {/* Loading indicator for next page */}
+                {isFetchingNextPage && (
+                  <div className="flex justify-center py-4">
+                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                  </div>
+                )}
               </>
             )}
           </div>
@@ -380,7 +438,6 @@ export function Sidebar() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              variant="destructive"
               onClick={() => {
                 if (chatToDelete) {
                   deleteChatMutation.mutate(chatToDelete);

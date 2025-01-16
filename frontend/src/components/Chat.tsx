@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState } from "react";
+import React, { useRef, useEffect, useState, useCallback } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import useChat from "@/hooks/useChat";
 import { TokenUsageBar } from "./TokenUsageBar";
@@ -12,119 +12,75 @@ import { Loader2, Sidebar } from "lucide-react";
 import { toast } from "sonner";
 import { UserMessage, AssistantMessage } from "./ChatMessage";
 import { ChatInput } from "./ChatInput";
-import axios from "axios";
-import urls from "@/constants/urls";
-import { Message } from "@/types/chat";
-import token from "@/constants/token";
-import { FileUploader } from "./FileUploader";
-import { ImagePreview } from "./ImagePreview";
+import { ChatProvider } from "@/context/ChatContext";
 
-const MessageList = React.memo(
-  ({
-    messages,
-    isStreaming,
-    onEditMessage,
-    onDeleteMessagePair,
-    onToggleMessagePair,
-  }: {
-    messages: Message[];
-    isStreaming: boolean;
-    onEditMessage: (messageId: string, newText: string) => Promise<void>;
-    onDeleteMessagePair: (pairId: string) => Promise<void>;
-    onToggleMessagePair: (pairId: string, hidden: boolean) => Promise<void>;
-  }) => {
-    const messagesEndRef = useRef<HTMLDivElement>(null);
+const MessageList = React.memo(() => {
+  const { messages, isStreaming } = useChat();
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const prevMessagesLength = useRef(messages.length);
 
-    useEffect(() => {
-      if (isStreaming || messages.length > 0) {
-        const scrollToBottom = () => {
-          messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-        };
+  useEffect(() => {
+    if (isStreaming || messages.length > prevMessagesLength.current) {
+      const scrollToBottom = () => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      };
+      requestAnimationFrame(scrollToBottom);
+    }
+    prevMessagesLength.current = messages.length;
+  }, [messages.length, isStreaming]);
 
-        requestAnimationFrame(scrollToBottom);
-      }
-    }, [messages, isStreaming]);
-
-    return (
-      <ScrollArea
-        className="flex-1 overflow-y-auto messages-scroll-area"
-        data-scrollarea
-      >
-        <div className="max-w-3xl mx-auto ">
-          {messages?.length === 0 && (
-            <div className="flex items-center justify-center h-full min-h-[400px]">
-              <h1 className="text-2xl font-semibold text-muted-foreground">
-                What can I help with?
-              </h1>
-            </div>
-          )}
-
-          {messages?.map((message, i) =>
-            message.role === "user" ? (
-              <UserMessage
-                key={i}
-                message={message}
-                onEdit={onEditMessage}
-                onDelete={onDeleteMessagePair}
-                onToggle={onToggleMessagePair}
-              />
-            ) : (
-              <AssistantMessage
-                key={i}
-                message={message}
-                onEdit={onEditMessage}
-                onDelete={onDeleteMessagePair}
-                onToggle={onToggleMessagePair}
-              />
-            )
-          )}
-          {isStreaming && (
-            <div className="flex items-center justify-center p-4">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            </div>
-          )}
-          <div ref={messagesEndRef} />
-        </div>
-      </ScrollArea>
+  const renderMessage = useCallback((message: Message) => {
+    return message.role === "user" ? (
+      <UserMessage key={message.id} message={message} />
+    ) : (
+      <AssistantMessage key={message.id} message={message} />
     );
-  },
-  (prevProps, nextProps) => {
-    return (
-      prevProps.isStreaming === nextProps.isStreaming &&
-      prevProps.messages.length === nextProps.messages.length &&
-      prevProps.messages.every(
-        (msg, i) =>
-          msg.id === nextProps.messages[i].id &&
-          msg.content === nextProps.messages[i].content
-      )
-    );
-  }
-);
+  }, []);
+
+  return (
+    <ScrollArea className="overflow-y-auto relative">
+      <div className="max-w-3xl mx-auto" ref={listRef}>
+        {messages?.length === 0 ? (
+          <div className="flex items-center justify-center h-full min-h-[400px]">
+            <h1 className="text-2xl font-semibold text-muted-foreground">
+              What can I help with?
+            </h1>
+          </div>
+        ) : (
+          messages.map(renderMessage)
+        )}
+        {isStreaming && (
+          <div className="flex items-center justify-center p-4">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        )}
+        <div ref={messagesEndRef} />
+      </div>
+    </ScrollArea>
+  );
+});
 
 MessageList.displayName = "MessageList";
-
-export default function Chat() {
+export default function ChatContainer() {
   const { chatId } = useParams<{
     chatId: string;
   }>();
+
+  return (
+    <ChatProvider chatId={chatId || "new"}>
+      <Chat />
+    </ChatProvider>
+  );
+}
+function Chat() {
   const [searchParams] = useSearchParams();
   const projectId = searchParams.get("projectId");
-
+  const { chatId } = useParams<{
+    chatId: string;
+  }>();
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const {
-    messages,
-    handleSubmit,
-    isStreaming,
-    error,
-    newMessage,
-    setNewMessage,
-    chat,
-    fetchMessages,
-    selectedFiles,
-    handleFileSelect,
-    handleRemoveFile,
-  } = useChat(chatId || "new");
+  const { error, chat } = useChat();
   const { data: tokenStats } = useChatTokens(chatId);
   const { data: project } = useProject(chat?.project?.toString() || "");
   const { data: projectChats } = useProjectChats(
@@ -132,69 +88,10 @@ export default function Chat() {
   );
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
-
-  useEffect(() => {
     if (error) {
       toast.error(error);
     }
   }, [error]);
-
-  const handleEditMessage = async (messageId: string, newText: string) => {
-    // if message ID is undefined, show a toast
-    if (!messageId) {
-      toast.error("Message ID is undefined");
-      return;
-    }
-    try {
-      await axios.patch(
-        `${urls.editMessage(messageId)}`,
-        { text: newText },
-        { headers: { Authorization: `Token ${token}` } }
-      );
-
-      // If this was a user message, we need to get a new response
-      const message = messages.find((m) => m.id === messageId);
-      if (message?.role === "user") {
-        // await handleSubmit(new Event("submit") as any, {
-        //   editedMessageId: messageId,
-        //   attachedFileIds: [],
-        // });
-      }
-
-      // Refresh messages
-      await fetchMessages();
-    } catch (error) {
-      toast.error("Failed to edit message");
-    }
-  };
-
-  const handleDeleteMessagePair = async (pairId: string) => {
-    try {
-      await axios.delete(`${urls.deleteMessagePair(pairId)}`, {
-        headers: { Authorization: `Token ${token}` },
-      });
-      await fetchMessages();
-      toast.success("Message pair deleted");
-    } catch (error) {
-      toast.error("Failed to delete message pair");
-    }
-  };
-
-  const handleToggleMessagePair = async (pairId: string, hidden: boolean) => {
-    try {
-      await axios.patch(
-        `${urls.toggleMessagePair(pairId)}`,
-        { hidden },
-        { headers: { Authorization: `Token ${token}` } }
-      );
-      await fetchMessages();
-      toast.success(hidden ? "Message pair hidden" : "Message pair shown");
-    } catch (error) {
-      toast.error("Failed to toggle message pair");
-    }
-  };
 
   return (
     <div
@@ -226,25 +123,11 @@ export default function Chat() {
         </div>
       </div>
 
-      <MessageList
-        messages={messages}
-        isStreaming={isStreaming}
-        onEditMessage={handleEditMessage}
-        onDeleteMessagePair={handleDeleteMessagePair}
-        onToggleMessagePair={handleToggleMessagePair}
-      />
+      <MessageList />
 
-      <div className="flex-none p-4 bg-background border-t border-border">
+      <div className="flex-none bg-background ">
         <div className="max-w-3xl mx-auto">
-          <ChatInput
-            onSubmit={handleSubmit}
-            newMessage={newMessage}
-            setNewMessage={setNewMessage}
-            isStreaming={isStreaming}
-            selectedFiles={selectedFiles}
-            setSelectedFiles={handleFileSelect}
-            projectId={projectId || undefined}
-          />
+          <ChatInput projectId={projectId || undefined} />
           <div className="mt-2 text-xs text-center text-muted-foreground">
             This chatbot can make mistakes. Consider checking important
             information.

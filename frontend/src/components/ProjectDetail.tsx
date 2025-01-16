@@ -69,7 +69,7 @@ export default function ProjectDetail() {
         <div className="col-span-2 space-y-6">
           <div>
             <h1 className="text-3xl font-bold">{project.name}</h1>
-            <p className="text-gray-500 mt-1">{project.description}</p>
+            <p className="text-muted-foreground mt-1">{project.description}</p>
           </div>
 
           <div className="space-y-4">
@@ -79,6 +79,7 @@ export default function ProjectDetail() {
               onChange={(e) => setInstructions(e.target.value)}
               placeholder="Enter project instructions..."
               rows={5}
+              className="resize-none"
             />
             <Button
               onClick={handleUpdateInstructions}
@@ -104,7 +105,7 @@ export default function ProjectDetail() {
             />
             <div className="space-y-4">
               {knowledge?.map((item) => (
-                <KnowledgeItem key={item.id} item={item} />
+                <KnowledgeItem key={item.id} item={item} preview />
               ))}
             </div>
           </div>
@@ -126,11 +127,11 @@ export default function ProjectDetail() {
                 {chats?.map((chat: Chat) => (
                   <div
                     key={chat.id}
-                    className="p-2 hover:bg-gray-100 rounded cursor-pointer"
+                    className="p-2 hover:bg-accent rounded cursor-pointer transition-colors"
                     onClick={() => navigate(`/chat/${chat.id}`)}
                   >
                     <h3 className="font-medium">{chat.title}</h3>
-                    <p className="text-sm text-gray-500">
+                    <p className="text-sm text-muted-foreground">
                       {new Date(chat.created_at).toLocaleDateString()}
                     </p>
                   </div>
@@ -140,11 +141,10 @@ export default function ProjectDetail() {
           </Card>
         </div>
       </div>
-
       <AddKnowledgeDialog
         open={addOpen}
         onOpenChange={setAddOpen}
-        projectId={parseInt(projectId!)}
+        projectId={projectId!}
       />
     </div>
   );

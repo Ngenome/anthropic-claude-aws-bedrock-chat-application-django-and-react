@@ -86,3 +86,10 @@ cover/
 # Misc
 .DS_Store
 Thumbs.db 
+
+# Local development
+# local db in any subdirectory
+*/db_local.sqlite3
+
+# chat data export
+*/chat_data_export.json

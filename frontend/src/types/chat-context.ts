@@ -1,33 +1,20 @@
-import { Message, Attachment, SavedSystemPrompt, Chat } from "@/types/chat";
+import { Message, SavedSystemPrompt, Chat } from "@/types/chat";
 
 export interface ChatContextType {
   messages: Message[];
-  newMessage: string;
-  isStreaming: boolean;
+  setMessages: React.Dispatch<React.SetStateAction<Message[]>>;
   error: string | null;
-  attachments: Attachment[];
+  isStreaming: boolean;
   systemPrompt: string;
   savedSystemPrompts: SavedSystemPrompt[];
-  isLoadingAttachments: boolean;
   chat: Chat | null;
-  selectedFiles: File[];
-  previewUrls: Map<string, string>;
-  isUploading: boolean;
-
-  // Methods
   fetchMessages: () => Promise<void>;
-  setNewMessage: (message: string) => void;
-  handleSubmit: (params: {
-    messageText: string;
-    projectId?: string;
-  }) => Promise<void>;
-  handleAttachment: (file: File) => Promise<void>;
-  removeAttachment: (attachmentId: string) => Promise<void>;
-  handleSystemPromptChange: (newPrompt: string) => void;
+  handleSystemPromptChange: (prompt: string) => void;
   handleSaveSystemPrompt: (title: string, prompt: string) => Promise<void>;
   handleUpdateSystemPrompt: () => Promise<void>;
-  refreshAttachments: () => void;
-  handleFileSelect: (files: File[]) => Promise<void>;
-  handleRemoveFile: (fileToRemove: File) => void;
-  clearFiles: () => void;
+  handleEditMessage: (messageId: string, newText: string) => Promise<void>;
+  handleDeleteMessagePair: (pairId: string) => Promise<void>;
+  handleToggleMessagePair: (pairId: string, hidden: boolean) => Promise<void>;
+  setSystemPrompt: React.Dispatch<React.SetStateAction<string>>;
+  setIsStreaming: React.Dispatch<React.SetStateAction<boolean>>;
 }

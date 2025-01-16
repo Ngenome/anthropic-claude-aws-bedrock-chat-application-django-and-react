@@ -13,20 +13,23 @@ export interface User {
 }
 
 // Message related types
-export interface Message {
-  id?: string;
-  role: "user" | "assistant";
-  content: string;
-  type: "text" | "image" | "file";
-  timestamp?: string;
+export interface MessageContent {
+  id: string;
+  content_type: "text" | "image" | "document";
+  text_content?: string;
+  file_content?: string;
+  mime_type?: string;
+  created_at: string;
   edited_at?: string | null;
-  message_pair?: string;
+}
+
+export interface Message {
+  id: string;
+  role: "user" | "assistant";
+  contents: MessageContent[];
+  created_at: string;
+  message_pair: string;
   hidden?: boolean;
-  file?: {
-    url: string;
-    name: string;
-    type: string;
-  };
 }
 
 export interface MessagePair {
@@ -71,14 +74,6 @@ export interface SavedSystemPrompt extends BaseModel {
   user: number;
   title: string;
   prompt: string;
-}
-
-// File attachment related types
-export interface Attachment extends BaseModel {
-  id: number;
-  chat: number;
-  file: string;
-  original_name: string;
 }
 
 // Token usage related types

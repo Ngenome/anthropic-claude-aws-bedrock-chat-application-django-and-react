@@ -16,7 +16,7 @@ import { AxiosError } from "axios";
 interface AddKnowledgeDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  projectId: number;
+  projectId: string;
 }
 
 export function AddKnowledgeDialog({

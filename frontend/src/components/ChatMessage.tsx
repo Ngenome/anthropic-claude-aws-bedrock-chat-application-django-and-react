@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import Markdown from "react-markdown";
-import { Message } from "@/types/chat";
+import { Message, MessageContent } from "@/types/chat";
 import { Button } from "./ui/button";
 import {
   Copy,
@@ -15,7 +15,6 @@ import {
   ChevronDown,
   ChevronRight,
   FileIcon,
-  ImageIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 import { UserIcon, BotIcon } from "lucide-react";
@@ -29,12 +28,10 @@ import {
 } from "./ui/dropdown-menu";
 import { Textarea } from "./ui/textarea";
 import { FullScreenCode } from "./FullScreenCode";
+import useChat from "@/hooks/useChat";
 
 interface ChatMessageProps {
   message: Message;
-  onEdit?: (messageId: string, newText: string) => Promise<void>;
-  onDelete?: (pairId: string) => Promise<void>;
-  onToggle?: (pairId: string, hidden: boolean) => Promise<void>;
   isHidden?: boolean;
 }
 
@@ -111,74 +108,136 @@ const MessageTimestamp = React.memo(
 
 MessageTimestamp.displayName = "MessageTimestamp";
 
-const MessageContent = ({ message }: { message: Message }) => {
-  switch (message.type) {
-    case "image":
-      return (
-        <div className="mt-2">
-          <img
-            src={message.content}
-            alt="Uploaded image"
-            className="max-w-full rounded-lg"
-            style={{ maxHeight: "400px" }}
-          />
-        </div>
-      );
+const MessageContentComponent = React.memo(
+  ({ message }: { message: Message }) => {
+    const processContent = (content: MessageContent) => {
+      switch (content.content_type) {
+        case "image":
+          return (
+            <div key={content.id} className="mt-2">
+              <img
+                src={content.file_content}
+                alt="Uploaded image"
+                className="max-w-full rounded-lg"
+                style={{ maxHeight: "400px" }}
+              />
+            </div>
+          );
 
-    case "file":
-      return (
-        <div className="mt-2 flex items-center gap-2 p-2 bg-muted rounded-lg">
-          <FileIcon className="h-4 w-4" />
-          <span className="text-sm">{message.content}</span>
-        </div>
-      );
+        case "document":
+          return (
+            <div
+              key={content.id}
+              className="mt-2 flex items-center gap-2 p-2 bg-muted rounded-lg"
+            >
+              <FileIcon className="h-4 w-4" />
+              <a
+                href={content.file_content}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm hover:underline"
+              >
+                {content.mime_type}
+              </a>
+            </div>
+          );
 
-    default:
-      return (
-        <Markdown
-          remarkPlugins={[remarkGfm]}
-          components={{
-            code({ className, children }) {
-              const code = String(children).replace(/\n$/, "");
-              const language = className?.replace("language-", "");
-              return <CodeBlock language={language}>{code}</CodeBlock>;
-            },
-          }}
-        >
-          {message.content}
-        </Markdown>
-      );
+        case "text":
+          return message.role === "assistant" ? (
+            <Markdown
+              key={`${content.id}-${message.id}`}
+              remarkPlugins={[remarkGfm]}
+              components={{
+                code({ node, className, children, ...props }) {
+                  const match = /language-(\w+)/.exec(className || "");
+                  const code = String(children).replace(/\n$/, "");
+
+                  // If there's no language specified and no newlines, treat as inline code
+                  const isInlineCode = !match && !code.includes("\n");
+
+                  if (isInlineCode) {
+                    return (
+                      <code className={className} {...props}>
+                        {children}
+                      </code>
+                    );
+                  }
+
+                  return (
+                    <CodeBlock
+                      key={`${node?.position?.start.offset}-${message.id}`}
+                      language={match ? match[1] : ""}
+                      showExpand={true}
+                      {...props}
+                    >
+                      {code}
+                    </CodeBlock>
+                  );
+                },
+              }}
+            >
+              {content.text_content || ""}
+            </Markdown>
+          ) : (
+            <div key={content.id} className="whitespace-pre-wrap">
+              {content.text_content}
+            </div>
+          );
+
+        default:
+          return null;
+      }
+    };
+
+    return (
+      <div className="space-y-2">
+        {message.contents.map((content) => processContent(content))}
+      </div>
+    );
   }
-};
+);
 
+MessageContentComponent.displayName = "MessageContentComponent";
 export const UserMessage = React.memo(
-  ({ message, onEdit, onDelete, onToggle, isHidden }: ChatMessageProps) => {
+  ({ message, isHidden }: ChatMessageProps) => {
+    const {
+      handleEditMessage,
+      handleDeleteMessagePair,
+      handleToggleMessagePair,
+    } = useChat();
     const [isEditing, setIsEditing] = useState(false);
-    const [editedContent, setEditedContent] = useState(message.content);
+    const [editedContent, setEditedContent] = useState(
+      message.contents.find((c) => c.content_type === "text")?.text_content ||
+        ""
+    );
     const [copied, setCopied] = useState(false);
 
     const handleSaveEdit = async () => {
-      if (onEdit) {
-        await onEdit(message.id, editedContent);
+      if (handleEditMessage && message.id) {
+        await handleEditMessage(message.id, editedContent);
         setIsEditing(false);
       }
     };
 
     const handleDelete = () => {
-      if (onDelete && message.message_pair) {
-        onDelete(message.message_pair);
+      if (handleDeleteMessagePair && message.message_pair) {
+        handleDeleteMessagePair(message.message_pair);
       }
     };
 
     const handleToggle = () => {
-      if (onToggle && message.message_pair) {
-        onToggle(message.message_pair, !isHidden);
+      if (handleToggleMessagePair && message.message_pair) {
+        handleToggleMessagePair(message.message_pair, !isHidden);
       }
     };
 
     const copyToClipboard = async () => {
       try {
-        await navigator.clipboard.writeText(message.content);
+        const textContent = message.contents
+          .filter((c) => c.content_type === "text")
+          .map((c) => c.text_content)
+          .join("\n");
+        await navigator.clipboard.writeText(textContent);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
         toast.success("Message copied to clipboard");
@@ -189,29 +248,62 @@ export const UserMessage = React.memo(
 
     return (
       <div
-        className={`px-4 py-6 bg-background ${isHidden ? "opacity-50" : ""}`}
+        className={`px-4 py-6 relative bg-background ${
+          isHidden ? "opacity-50" : ""
+        }`}
       >
+        <MessageControls
+          isEditing={isEditing}
+          setIsEditing={setIsEditing}
+          onDelete={handleDelete}
+          onToggle={handleToggle}
+          isHidden={isHidden}
+          message={message}
+          copied={copied}
+          onCopy={copyToClipboard}
+        />
         <div className="max-w-3xl mx-auto flex gap-4">
           <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
             <UserIcon className="w-5 h-5 text-muted-foreground" />
           </div>
           <div className="flex-1">
             <div className="relative group prose dark:prose-invert max-w-none">
-              <MessageContent message={message} />
-              <MessageControls
-                isEditing={isEditing}
-                setIsEditing={setIsEditing}
-                onDelete={handleDelete}
-                onToggle={handleToggle}
-                isHidden={isHidden}
-                message={message}
-                copied={copied}
-                onCopy={copyToClipboard}
-              />
+              {isEditing ? (
+                <div className="flex flex-col gap-2">
+                  <Textarea
+                    value={editedContent}
+                    onChange={(e) => setEditedContent(e.target.value)}
+                    className="min-h-[100px]"
+                  />
+                  <div className="flex justify-end gap-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setIsEditing(false)}
+                    >
+                      <X className="h-4 w-4 mr-2" />
+                      Cancel
+                    </Button>
+                    <Button
+                      variant="default"
+                      size="sm"
+                      onClick={handleSaveEdit}
+                    >
+                      <Check className="h-4 w-4 mr-2" />
+                      Save
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <MessageContentComponent message={message} />
+              )}
             </div>
             <MessageTimestamp
-              timestamp={message.timestamp}
-              editedAt={message.edited_at}
+              timestamp={message.created_at}
+              editedAt={
+                message.contents.find((c) => c.content_type === "text")
+                  ?.edited_at
+              }
             />
           </div>
         </div>
@@ -221,9 +313,16 @@ export const UserMessage = React.memo(
 );
 
 export const AssistantMessage = React.memo(
-  ({ message, onEdit, onDelete, onToggle, isHidden }: ChatMessageProps) => {
+  ({ message, isHidden }: ChatMessageProps) => {
+    const {
+      handleEditMessage,
+      handleDeleteMessagePair,
+      handleToggleMessagePair,
+    } = useChat();
     const [isEditing, setIsEditing] = useState(false);
-    const [editedContent, setEditedContent] = useState(message.content);
+    const [editedContent, setEditedContent] = useState(
+      message.contents[0]?.text_content || ""
+    );
     const [copied, setCopied] = useState(false);
     const [fullScreenCode, setFullScreenCode] = useState<{
       code: string;
@@ -242,30 +341,31 @@ export const AssistantMessage = React.memo(
       return { thinking, mainContent };
     };
 
-    const { thinking, mainContent } = processContent(message.content);
+    const textContent = message.contents[0]?.text_content || "";
+    const { thinking, mainContent } = processContent(textContent);
 
     const handleSaveEdit = async () => {
-      if (onEdit) {
-        await onEdit(message.id, editedContent);
+      if (handleEditMessage && message.id) {
+        await handleEditMessage(message.id, editedContent);
         setIsEditing(false);
       }
     };
 
     const handleDelete = () => {
-      if (onDelete && message.message_pair) {
-        onDelete(message.message_pair);
+      if (handleDeleteMessagePair && message.message_pair) {
+        handleDeleteMessagePair(message.message_pair);
       }
     };
 
     const handleToggle = () => {
-      if (onToggle && message.message_pair) {
-        onToggle(message.message_pair, !isHidden);
+      if (handleToggleMessagePair && message.message_pair) {
+        handleToggleMessagePair(message.message_pair, !isHidden);
       }
     };
 
     const copyToClipboard = async () => {
       try {
-        await navigator.clipboard.writeText(message.content);
+        await navigator.clipboard.writeText(textContent);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
         toast.success("Message copied to clipboard");
@@ -275,13 +375,49 @@ export const AssistantMessage = React.memo(
     };
 
     return (
-      <div className={`px-4 py-6 bg-muted/50 ${isHidden ? "opacity-50" : ""}`}>
+      <div
+        className={` relative px-4 py-6 bg-muted/50 ${
+          isHidden ? "opacity-50" : ""
+        }`}
+      >
+        <MessageControls
+          isEditing={isEditing}
+          setIsEditing={setIsEditing}
+          onDelete={handleDelete}
+          onToggle={handleToggle}
+          isHidden={isHidden}
+          message={message}
+          copied={copied}
+          onCopy={copyToClipboard}
+        />
         <div className="max-w-3xl mx-auto flex gap-4">
           <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center">
             <BotIcon className="w-5 h-5 text-primary-foreground" />
           </div>
-          <div className="flex-1">
+          <div className="flex-1 ">
             <div className="relative group prose dark:prose-invert max-w-none">
+              {thinking && (
+                <div className="mb-4 ">
+                  <button
+                    onClick={() => setShowThinking(!showThinking)}
+                    className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
+                  >
+                    {showThinking ? (
+                      <ChevronDown className="h-4 w-4" />
+                    ) : (
+                      <ChevronRight className="h-4 w-4" />
+                    )}
+                    Thinking Process
+                  </button>
+                  {showThinking && (
+                    <div className="mt-2 text-sm text-muted-foreground">
+                      <Markdown remarkPlugins={[remarkGfm]}>
+                        {thinking}
+                      </Markdown>
+                    </div>
+                  )}
+                </div>
+              )}
               {isEditing ? (
                 <div className="flex flex-col gap-2">
                   <Textarea
@@ -289,122 +425,81 @@ export const AssistantMessage = React.memo(
                     onChange={(e) => setEditedContent(e.target.value)}
                     className="min-h-[100px]"
                   />
-                  <div className="flex gap-2">
-                    <Button size="sm" onClick={handleSaveEdit}>
-                      <Check className="h-4 w-4 mr-2" />
-                      Save
-                    </Button>
+                  <div className="flex justify-end gap-2">
                     <Button
-                      size="sm"
                       variant="ghost"
+                      size="sm"
                       onClick={() => setIsEditing(false)}
                     >
                       <X className="h-4 w-4 mr-2" />
                       Cancel
                     </Button>
+                    <Button
+                      variant="default"
+                      size="sm"
+                      onClick={handleSaveEdit}
+                    >
+                      <Check className="h-4 w-4 mr-2" />
+                      Save
+                    </Button>
                   </div>
                 </div>
               ) : (
-                <>
-                  {thinking && (
-                    <div className="mb-4">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setShowThinking(!showThinking)}
-                        className="mb-2 text-muted-foreground hover:text-foreground"
-                      >
-                        {showThinking ? (
-                          <ChevronDown className="h-4 w-4 mr-2" />
-                        ) : (
-                          <ChevronRight className="h-4 w-4 mr-2" />
-                        )}
-                        Thinking Process
-                      </Button>
-                      {showThinking && (
-                        <div className="pl-4 border-l-2 border-muted">
-                          <Markdown
-                            remarkPlugins={[remarkGfm]}
-                            components={{
-                              code({ className, children }) {
-                                const code = String(children).replace(
-                                  /\n$/,
-                                  ""
-                                );
-                                const language = className?.replace(
-                                  "language-",
-                                  ""
-                                );
+                <Markdown
+                  remarkPlugins={[remarkGfm]}
+                  components={{
+                    // the pre tag - return a pre tag with the overflow-x style removed
+                    pre(props) {
+                      return (
+                        <pre
+                          {...props}
+                          className="!overflow-visible !bg-transparent"
+                        />
+                      );
+                    },
 
-                                return (
-                                  <div className="relative group">
-                                    <CodeBlock className={className}>
-                                      {code}
-                                    </CodeBlock>
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      className="absolute top-2 right-12 opacity-0 group-hover:opacity-100 transition-opacity"
-                                      onClick={() =>
-                                        setFullScreenCode({ code, language })
-                                      }
-                                    >
-                                      <Maximize2 className="h-4 w-4" />
-                                    </Button>
-                                  </div>
-                                );
-                              },
-                            }}
-                          >
-                            {thinking}
-                          </Markdown>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  <Markdown
-                    remarkPlugins={[remarkGfm]}
-                    components={{
-                      code({ className, children }) {
-                        const code = String(children).replace(/\n$/, "");
-                        const language = className?.replace("language-", "");
+                    //the code tag
+                    code({ node, className, children, ...props }) {
+                      const match = /language-(\w+)/.exec(className || "");
+                      const code = String(children).replace(/\n$/, "");
 
+                      // If there's no language specified and no newlines, treat as inline code
+                      const isInlineCode = !match && !code.includes("\n");
+
+                      if (isInlineCode) {
                         return (
-                          <div className="relative group">
-                            <CodeBlock className={className}>{code}</CodeBlock>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="absolute top-2 right-12 opacity-0 group-hover:opacity-100 transition-opacity"
-                              onClick={() =>
-                                setFullScreenCode({ code, language })
-                              }
-                            >
-                              <Maximize2 className="h-4 w-4" />
-                            </Button>
-                          </div>
+                          <code className={className} {...props}>
+                            {children}
+                          </code>
                         );
-                      },
-                    }}
-                  >
-                    {mainContent}
-                  </Markdown>
-                  <MessageControls
-                    isEditing={isEditing}
-                    setIsEditing={setIsEditing}
-                    onDelete={handleDelete}
-                    onToggle={handleToggle}
-                    isHidden={isHidden}
-                    message={message}
-                    copied={copied}
-                    onCopy={copyToClipboard}
-                  />
-                </>
+                      }
+
+                      return (
+                        <CodeBlock
+                          key={`${node?.position?.start.offset}-${message.id}`}
+                          language={match ? match[1] : ""}
+                          showExpand={true}
+                          onExpand={() =>
+                            setFullScreenCode({
+                              code,
+                              language: match ? match[1] : undefined,
+                            })
+                          }
+                          {...props}
+                        >
+                          {code}
+                        </CodeBlock>
+                      );
+                    },
+                  }}
+                >
+                  {mainContent}
+                </Markdown>
               )}
             </div>
             <MessageTimestamp
-              timestamp={message.timestamp}
-              editedAt={message.edited_at}
+              timestamp={message.created_at}
+              editedAt={message.contents[0]?.edited_at}
             />
           </div>
         </div>

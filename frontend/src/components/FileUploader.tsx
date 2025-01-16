@@ -3,7 +3,7 @@ import { Button } from "./ui/button";
 import { PaperclipIcon, Loader2 } from "lucide-react";
 
 interface FileUploaderProps {
-  onFileSelect: (files: FileList | File[]) => void;
+  onFileSelect: (files: FileList) => void;
   isLoading?: boolean;
   existingFiles?: File[];
 }
@@ -11,7 +11,6 @@ interface FileUploaderProps {
 export const FileUploader: React.FC<FileUploaderProps> = ({
   onFileSelect,
   isLoading = false,
-  existingFiles = [],
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
