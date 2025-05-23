@@ -1,0 +1,99 @@
+# Core FastAPI dependencies
+fastapi==0.115.12
+uvicorn[standard]==0.34.2
+pydantic==2.11.5
+pydantic-settings==2.7.0
+
+# Database
+sqlalchemy==2.0.41
+asyncpg==0.30.0  # Async PostgreSQL driver
+alembic==1.16.1
+psycopg2-binary==2.9.10  # Sync PostgreSQL driver for migrations
+
+# Authentication & Security
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+python-multipart==0.0.19  # For form data and file uploads
+
+# Redis for caching and rate limiting
+redis==5.1.1
+aioredis==2.0.1
+
+# Background tasks
+celery==5.4.0
+flower==2.0.1  # Celery monitoring
+
+# AWS Services
+boto3==1.34.149
+botocore==1.34.149
+
+# AI & ML
+anthropic==0.42.0
+transformers==4.47.1
+tokenizers==0.21.0
+
+# Email
+aiosmtplib==3.0.2
+
+# File handling & validation
+python-magic==0.4.27
+pillow==10.2.0
+
+# Google OAuth
+google-auth==2.35.0
+google-auth-oauthlib==1.2.1
+
+# HTTP client
+httpx==0.27.0
+aiohttp==3.9.3
+
+# Environment management
+python-dotenv==1.0.1
+
+# Validation & utilities
+email-validator==2.2.0
+python-slugify==8.0.4
+
+# Development & testing
+pytest==8.3.4
+pytest-asyncio==0.24.0
+pytest-cov==6.0.0
+black==24.10.0
+isort==5.13.2
+flake8==7.1.1
+
+# Monitoring & logging
+structlog==24.4.0
+rich==13.9.4
+
+# Documentation
+mkdocs==1.6.1
+mkdocs-material==9.5.48
+
+# CORS
+fastapi-cors==0.0.6
+
+# Rate limiting
+slowapi==0.1.9
+
+# File uploads
+aiofiles==24.1.0
+
+# UUID utilities
+shortuuid==1.0.13
+
+# Date/time utilities
+pytz==2024.1
+python-dateutil==2.9.0.post0
+
+# JSON utilities
+orjson==3.10.0
+
+# WebSocket support (for real-time chat)
+websockets==13.1
+
+# Background task monitoring
+prometheus-client==0.21.1
+
+# Health checks
+httptools==0.6.4
