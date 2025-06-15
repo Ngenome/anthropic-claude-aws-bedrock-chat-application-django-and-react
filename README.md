@@ -10,6 +10,7 @@ This project is a full-stack AI chat application that uses Claude AI via AWS Bed
 - File attachments
 - Token usage tracking
 - User authentication
+- Voice input
 
 ## Tech Stack
 
