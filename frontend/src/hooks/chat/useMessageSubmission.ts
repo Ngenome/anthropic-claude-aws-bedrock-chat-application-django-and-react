@@ -5,6 +5,7 @@ import token from "@/constants/token";
 import urls from "@/constants/urls";
 import { Message } from "@/types/chat";
 import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
 
 export const useMessageSubmission = ({
   chatId,
@@ -23,6 +24,8 @@ export const useMessageSubmission = ({
   setNewMessage: React.Dispatch<React.SetStateAction<string>>;
   setIsStreaming: React.Dispatch<React.SetStateAction<boolean>>;
 }) => {
+  const queryClient = useQueryClient();
+
   const navigate = useNavigate();
 
   const handleSubmit = useCallback(
@@ -122,6 +125,7 @@ export const useMessageSubmission = ({
 
                 case "chat_id":
                   navigate(`/chat/${parsed.content}`);
+                  queryClient.invalidateQueries({ queryKey: ["chats"] });
                   break;
               }
             } catch (e) {
@@ -146,6 +150,7 @@ export const useMessageSubmission = ({
       setMessages,
       setNewMessage,
       setIsStreaming,
+      queryClient,
     ]
   );
 

@@ -3,6 +3,7 @@ from django.core.exceptions import ValidationError
 from .utils.file_validators import validate_image_size, validate_document_size, validate_mime_type
 import uuid
 import base64
+from django.utils import timezone
 
 class MessageContent(models.Model):
     CONTENT_TYPES = (
@@ -222,7 +223,75 @@ class TokenUsage(models.Model):
         ordering = ['-created_at']
 
     def __str__(self):
-        return f"{self.user.email} - {self.tokens_used} tokens on {self.created_at}"
+        return f"{self.user.email} - {self.tokens_used} tokens at {self.created_at}"
+
+
+class MemoryTag(models.Model):
+    """Tags for categorizing user memories"""
+    name = models.CharField(max_length=50, unique=True)
+    color = models.CharField(max_length=7, default="#3B82F6")  # Hex color for UI
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['name']
+    
+    def __str__(self):
+        return self.name
+
+
+class UserMemory(models.Model):
+    """Stores extracted information about users from their conversations"""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey('appauth.AppUser', on_delete=models.CASCADE, related_name='memories')
+    chat = models.ForeignKey(Chat, on_delete=models.CASCADE, related_name='extracted_memories')
+    
+    # Core memory data
+    summary = models.TextField(help_text="AI-generated summary of the user information")
+    raw_content = models.TextField(help_text="Raw extracted content from the conversation")
+    confidence_score = models.FloatField(default=0.8, help_text="AI confidence in the extracted information (0-1)")
+    
+    # Memory categorization
+    category = models.CharField(
+        max_length=50,
+        choices=[
+            ('personal', 'Personal Information'),
+            ('preferences', 'Preferences & Interests'),
+            ('work', 'Work & Professional'),
+            ('goals', 'Goals & Aspirations'),
+            ('relationships', 'Relationships'),
+            ('lifestyle', 'Lifestyle & Habits'),
+            ('technical', 'Technical Skills & Knowledge'),
+            ('other', 'Other')
+        ],
+        default='other'
+    )
+    
+    # Metadata
+    tags = models.ManyToManyField(MemoryTag, blank=True, related_name='memories')
+    is_verified = models.BooleanField(default=False, help_text="Whether user has confirmed this information")
+    is_active = models.BooleanField(default=True, help_text="Whether this memory should be used in future conversations")
+    source_message_pair = models.ForeignKey(MessagePair, on_delete=models.SET_NULL, null=True, blank=True)
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    last_referenced = models.DateTimeField(null=True, blank=True, help_text="When this memory was last used in a conversation")
+    
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['user', 'category']),
+            models.Index(fields=['user', 'is_active']),
+            models.Index(fields=['created_at']),
+        ]
+    
+    def __str__(self):
+        return f"{self.user.email} - {self.category} - {self.summary[:50]}..."
+    
+    def increment_reference(self):
+        """Update the last_referenced timestamp"""
+        self.last_referenced = timezone.now()
+        self.save(update_fields=['last_referenced'])
     
 
 

@@ -8,18 +8,29 @@ from ..models import Chat, MessagePair, Message, Project, MessageContent
 from ..prompts.coding import get_coding_system_prompt
 from ..utils.file_validators import validate_image_size, validate_document_size, validate_mime_type
 from ..utils.token_counter import count_tokens
+from .memory_service import MemoryExtractionService
 from botocore.exceptions import ClientError
 from transformers import GPT2TokenizerFast
 User = get_user_model()
 
+
+
 class ChatService:
     CLAUDE_35_SONNET_V2 = "anthropic.claude-3-5-sonnet-20241022-v2:0"
     CLAUDE_35_HAIKU_V1_0 = "anthropic.claude-3-5-haiku-20241022-v1:0"
-
-    def __init__(self):
+    CLAUDE_35_SONNET_V1 = "anthropic.claude-3-5-sonnet-20240620-v1:0"
+    
+    def __init__(self): 
         self.bedrock_runtime = boto3.client(
             service_name="bedrock-runtime",
             region_name="us-west-2",
+            aws_access_key_id=os.getenv("AWS_BEDROCK_ACCESS_KEY_ID"),
+            aws_secret_access_key=os.getenv("AWS_BEDROCK_SECRET_ACCESS_KEY")
+        )
+
+        self.bedrock_runtime_us_east = boto3.client(
+            service_name="bedrock-runtime",
+            region_name="us-east-1",
             aws_access_key_id=os.getenv("AWS_BEDROCK_ACCESS_KEY_ID"),
             aws_secret_access_key=os.getenv("AWS_BEDROCK_SECRET_ACCESS_KEY")
         )
@@ -137,9 +148,9 @@ class ChatService:
 
         return "\n\n".join(context_parts)
 
-    def prepare_message_history(self, chat: Chat) -> List[Dict[str, Any]]:
+    def prepare_message_history(self, chat: Chat, current_message: str = "") -> List[Dict[str, Any]]:
         """
-        Prepare message history in Claude API format
+        Prepare message history in Claude API format with user memories
         """
         messages = []
         
@@ -151,6 +162,21 @@ class ChatService:
                 'content': [{'type': 'text', 'text': f"<project_knowledge>\n{project_context}\n</project_knowledge>"}]
             })
         
+        # Add user memories context if available
+        memory_service = MemoryExtractionService()
+        relevant_memories = memory_service.get_relevant_memories_for_context(
+            user=chat.user,
+            current_message=current_message,
+            limit=5
+        )
+        
+        if relevant_memories:
+            memory_context = memory_service.format_memories_for_context(relevant_memories)
+            messages.append({
+                'role': 'user',
+                'content': [{'type': 'text', 'text': memory_context}]
+            })
+        
         # Build message history
         for pair in MessagePair.objects.filter(chat=chat).order_by('created_at'):
             for message in pair.messages.all():
@@ -159,8 +185,6 @@ class ChatService:
                     'content': message.get_content()  # This now returns content blocks as per Claude API
                 })
 
-
-        
         return messages
 
     def _format_file_contents(self, file_contents: List[str]) -> str:
@@ -196,10 +220,22 @@ class ChatService:
         })
 
     def invoke_model(self, body: str):
-        return self.bedrock_runtime.invoke_model_with_response_stream(
-            body=body,
-            modelId=self.CLAUDE_35_SONNET_V2
-        )
+        """
+        Invoke Claude model with fallback to different versions/regions on throttling
+        """
+        try:
+            return self.bedrock_runtime.invoke_model_with_response_stream(
+                body=body,
+                modelId=self.CLAUDE_35_SONNET_V2
+            )
+        except ClientError as e:
+            if e.response['Error']['Code'] == 'ThrottlingException':
+                # Fallback to Claude 3.5 Sonnet v1 in us-east-1
+                return self.bedrock_runtime_us_east.invoke_model_with_response_stream(
+                    body=body,
+                    modelId=self.CLAUDE_35_SONNET_V1
+                )
+            raise e
 
     def create_new_message(self, message_pair: MessagePair, role: str, text: str = None, files: list = None) -> Message:
         """
@@ -234,3 +270,4 @@ class ChatService:
                 )
 
         return message 
+    

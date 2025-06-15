@@ -1,5 +1,6 @@
-from typing import Optional, List, Any
-from pydantic import BaseSettings, validator, AnyHttpUrl
+from typing import Optional, List, Any, Union
+from pydantic import field_validator, AnyHttpUrl, Field
+from pydantic_settings import BaseSettings
 import os
 from pathlib import Path
 
@@ -15,17 +16,29 @@ class Settings(BaseSettings):
     SECRET_KEY: str
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
     
-    # CORS
-    BACKEND_CORS_ORIGINS: List[AnyHttpUrl] = []
+    # CORS - Compatible with Django naming
+    BACKEND_CORS_ORIGINS: Union[str, List[str]] = Field(
+        default="", 
+        alias="CORS_ALLOWED_ORIGINS"
+    )
     FRONTEND_URL: str = "http://localhost:3000"
     
-    @validator("BACKEND_CORS_ORIGINS", pre=True)
+    @field_validator("BACKEND_CORS_ORIGINS", mode="before")
+    @classmethod
     def assemble_cors_origins(cls, v: Any) -> List[str]:
-        if isinstance(v, str) and not v.startswith("["):
-            return [i.strip() for i in v.split(",")]
-        elif isinstance(v, (list, str)):
+        if isinstance(v, str):
+            if not v:  # Handle empty string
+                return []
+            if v.startswith("["):
+                # Handle JSON array format
+                import json
+                return json.loads(v)
+            else:
+                # Handle comma-separated format
+                return [i.strip() for i in v.split(",") if i.strip()]
+        elif isinstance(v, list):
             return v
-        raise ValueError(v)
+        return []
     
     # Database
     DATABASE_URL: str
@@ -36,31 +49,49 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://localhost:6379/0"
     CACHE_EXPIRE_SECONDS: int = 300  # 5 minutes
     
-    # Email Configuration
+    # Email Configuration - Compatible with Django naming
     SMTP_TLS: bool = True
     SMTP_SSL: bool = False
-    SMTP_PORT: int = 587
-    SMTP_HOST: str = "smtp.zoho.com"
-    SMTP_USER: str
-    SMTP_PASSWORD: str
-    DEFAULT_FROM_EMAIL: str
-    SUPPORT_EMAIL: str
+    SMTP_PORT: int = Field(default=587, alias="EMAIL_PORT")
+    SMTP_HOST: str = Field(default="smtp.zoho.com", alias="EMAIL_HOST")
+    SMTP_USER: str = Field(alias="EMAIL_USER")
+    SMTP_PASSWORD: str = Field(alias="EMAIL_PASSWORD")
+    DEFAULT_FROM_EMAIL: str = Field(alias="EMAIL_USER")  # Use same as SMTP_USER
+    SUPPORT_EMAIL: str = Field(alias="EMAIL_USER")  # Use same as SMTP_USER
     
-    # AWS Configuration
-    AWS_ACCESS_KEY_ID: str
-    AWS_SECRET_ACCESS_KEY: str
+    # AWS Configuration - Compatible with existing naming
+    AWS_ACCESS_KEY_ID: str = Field(alias="AWS_S3_ACCESS_KEY_ID")
+    AWS_SECRET_ACCESS_KEY: str = Field(alias="AWS_S3_SECRET_ACCESS_KEY")
     AWS_S3_BUCKET_NAME: str
-    AWS_S3_REGION: str = "us-west-2"
+    AWS_S3_REGION: str = Field(default="us-west-2", alias="AWS_S3_BUCKET_REGION")
     
-    # AWS Bedrock (for Claude AI)
-    AWS_BEDROCK_ACCESS_KEY_ID: str
-    AWS_BEDROCK_SECRET_ACCESS_KEY: str
+    # AWS Bedrock (for Claude AI) - Use existing Anthropic key for now
+    AWS_BEDROCK_ACCESS_KEY_ID: str = Field(alias="AWS_BEDROCK_ACCESS_KEY_ID")
+    AWS_BEDROCK_SECRET_ACCESS_KEY: str = Field(alias="AWS_BEDROCK_SECRET_ACCESS_KEY") 
     AWS_BEDROCK_REGION: str = "us-west-2"
     AWS_BEDROCK_REGION_FALLBACK: str = "us-east-1"
+    
+    @property
+    def AWS_STORAGE_BUCKET_NAME(self) -> str:
+        """Alias for S3 bucket name for compatibility."""
+        return self.AWS_S3_BUCKET_NAME
     
     # Google OAuth
     GOOGLE_CLIENT_ID: Optional[str] = None
     GOOGLE_CLIENT_SECRET: Optional[str] = None
+    
+    # Additional API Keys (optional to avoid validation errors)
+    OPENAI_API_KEY: Optional[str] = None
+    ANTHROPIC_API_KEY: Optional[str] = None
+    AZURE_OPENAI_KEY: Optional[str] = None
+    BAZURE_OPENAI_KEY: Optional[str] = None
+    PIXABAY_API_KEY: Optional[str] = None
+    
+    # Additional fields from Django (optional)
+    HOST: Optional[str] = None
+    ALLOWED_HOSTS: Optional[str] = None
+    CSRF_TRUSTED_ORIGINS: Optional[str] = None
+    AWS_S3_BUCKET_URL: Optional[str] = None
     
     # Paystack (if needed)
     PAYSTACK_SECRET_KEY: Optional[str] = None
@@ -96,6 +127,9 @@ class Settings(BaseSettings):
     CLAUDE_DEFAULT_MODEL: str = "anthropic.claude-3-5-sonnet-20241022-v2:0"
     CLAUDE_FALLBACK_MODEL: str = "anthropic.claude-3-5-haiku-20241022-v1:0"
     
+    # Default System Prompt
+    DEFAULT_SYSTEM_PROMPT: str = """You are Claude, an AI assistant created by Anthropic. You are helpful, harmless, and honest. You should be conversational and engaging while providing accurate, thoughtful responses. If you're not sure about something, say so rather than guessing."""
+    
     # Memory & Context
     MAX_MEMORY_ITEMS: int = 10
     MAX_PROJECT_KNOWLEDGE_TOKENS: int = 160000  # 80% of context window
@@ -108,9 +142,11 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
     LOG_FORMAT: str = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     
-    class Config:
-        env_file = ".env"
-        case_sensitive = True
+    model_config = {
+        "env_file": ".env",
+        "case_sensitive": True,
+        "extra": "ignore"  # Ignore extra fields to prevent validation errors
+    }
 
 
 # Create settings instance

@@ -13,6 +13,10 @@ import ProjectDetail from "@/components/ProjectDetail";
 import { Toaster as SonnerToaster } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { ThemeProvider } from "@/components/ThemeProvider";
+import DesignProjects from "@/components/prototypes/DesignProjects";
+import DesignProjectDetail from "@/components/prototypes/DesignProjectDetail";
+import PrototypeDetail from "@/components/prototypes/PrototypeDetail";
+import PrototypesByGroup from "@/components/prototypes/PrototypesByGroup";
 
 const queryClient = new QueryClient();
 
@@ -36,6 +40,20 @@ const App: React.FC = () => {
                   element={<Chat />}
                 />
                 <Route path="/chat/:chatId" element={<Chat />} />
+                {/* Prototypes Routes */}
+                <Route path="/design-projects" element={<DesignProjects />} />
+                <Route
+                  path="/design-projects/:projectId"
+                  element={<DesignProjectDetail />}
+                />
+                <Route
+                  path="/prototypes/:prototypeId"
+                  element={<PrototypeDetail />}
+                />
+                <Route
+                  path="/groups/:groupId/prototypes"
+                  element={<PrototypesByGroup />}
+                />
               </Routes>
             </div>
           </div>

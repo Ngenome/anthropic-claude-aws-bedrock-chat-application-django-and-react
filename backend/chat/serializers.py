@@ -1,6 +1,6 @@
 # serializers.py
 from rest_framework import serializers
-from .models import Chat, Message, MessagePair, SavedSystemPrompt, Project, ProjectKnowledge, MessageContent
+from .models import Chat, Message, MessagePair, SavedSystemPrompt, Project, ProjectKnowledge, MessageContent, UserMemory, MemoryTag
 
 class MessageContentSerializer(serializers.ModelSerializer):
     class Meta:
@@ -62,3 +62,73 @@ class ProjectKnowledgeSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(error_message)
             
         return data
+
+class MemoryTagSerializer(serializers.ModelSerializer):
+    memory_count = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = MemoryTag
+        fields = ['id', 'name', 'color', 'created_at', 'memory_count']
+        read_only_fields = ['created_at']
+    
+    def get_memory_count(self, obj):
+        """Return the number of active memories with this tag"""
+        return obj.memories.filter(is_active=True).count()
+
+class UserMemorySerializer(serializers.ModelSerializer):
+    tags = MemoryTagSerializer(many=True, read_only=True)
+    tag_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        write_only=True,
+        required=False,
+        help_text="List of tag IDs to associate with this memory"
+    )
+    
+    class Meta:
+        model = UserMemory
+        fields = [
+            'id', 'summary', 'raw_content', 'confidence_score', 'category',
+            'tags', 'tag_ids', 'is_verified', 'is_active', 'source_message_pair',
+            'created_at', 'updated_at', 'last_referenced'
+        ]
+        read_only_fields = ['created_at', 'updated_at', 'last_referenced']
+    
+    def create(self, validated_data):
+        tag_ids = validated_data.pop('tag_ids', [])
+        memory = UserMemory.objects.create(**validated_data)
+        
+        if tag_ids:
+            tags = MemoryTag.objects.filter(id__in=tag_ids)
+            memory.tags.set(tags)
+        
+        return memory
+    
+    def update(self, instance, validated_data):
+        tag_ids = validated_data.pop('tag_ids', None)
+        
+        # Update other fields
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        
+        # Update tags if provided
+        if tag_ids is not None:
+            tags = MemoryTag.objects.filter(id__in=tag_ids)
+            instance.tags.set(tags)
+        
+        return instance
+
+class UserMemoryListSerializer(serializers.ModelSerializer):
+    """Simplified serializer for memory lists"""
+    tags = MemoryTagSerializer(many=True, read_only=True)
+    tag_count = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = UserMemory
+        fields = [
+            'id', 'summary', 'category', 'confidence_score', 'is_verified', 
+            'is_active', 'tags', 'tag_count', 'created_at', 'last_referenced'
+        ]
+    
+    def get_tag_count(self, obj):
+        return obj.tags.count()

@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, validator, Field
+from pydantic import BaseModel, EmailStr, field_validator, Field
 from typing import Optional
 from datetime import datetime
 import uuid
@@ -17,13 +17,15 @@ class UserCreate(UserBase):
     password: str = Field(..., min_length=8, max_length=100)
     confirm_password: str
     
-    @validator('confirm_password')
-    def passwords_match(cls, v, values, **kwargs):
-        if 'password' in values and v != values['password']:
+    @field_validator('confirm_password')
+    @classmethod
+    def passwords_match(cls, v, info):
+        if 'password' in info.data and v != info.data['password']:
             raise ValueError('Passwords do not match')
         return v
     
-    @validator('password')
+    @field_validator('password')
+    @classmethod
     def validate_password(cls, v):
         if len(v) < 8:
             raise ValueError('Password must be at least 8 characters long')
@@ -58,8 +60,7 @@ class User(UserBase):
     full_name: Optional[str] = None
     avatar_url: Optional[str] = None
     
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 
 # User profile with additional info
@@ -88,13 +89,15 @@ class PasswordChange(BaseModel):
     new_password: str = Field(..., min_length=8, max_length=100)
     confirm_new_password: str
     
-    @validator('confirm_new_password')
-    def passwords_match(cls, v, values, **kwargs):
-        if 'new_password' in values and v != values['new_password']:
+    @field_validator('confirm_new_password')
+    @classmethod
+    def passwords_match(cls, v, info):
+        if 'new_password' in info.data and v != info.data['new_password']:
             raise ValueError('New passwords do not match')
         return v
     
-    @validator('new_password')
+    @field_validator('new_password')
+    @classmethod
     def validate_new_password(cls, v):
         if len(v) < 8:
             raise ValueError('Password must be at least 8 characters long')
@@ -122,13 +125,15 @@ class PasswordResetConfirm(BaseModel):
     new_password: str = Field(..., min_length=8, max_length=100)
     confirm_new_password: str
     
-    @validator('confirm_new_password')
-    def passwords_match(cls, v, values, **kwargs):
-        if 'new_password' in values and v != values['new_password']:
+    @field_validator('confirm_new_password')
+    @classmethod
+    def passwords_match(cls, v, info):
+        if 'new_password' in info.data and v != info.data['new_password']:
             raise ValueError('Passwords do not match')
         return v
     
-    @validator('new_password')
+    @field_validator('new_password')
+    @classmethod
     def validate_new_password(cls, v):
         if len(v) < 8:
             raise ValueError('Password must be at least 8 characters long')

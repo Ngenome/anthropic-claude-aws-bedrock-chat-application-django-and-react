@@ -22,6 +22,7 @@ import {
   Calendar,
   Clock,
   FolderIcon,
+  Layout,
 } from "lucide-react";
 import { ThemeToggle } from "./ThemeToggle";
 import { Input } from "@/components/ui/input";
@@ -37,6 +38,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useDebounce } from "@/hooks/useDebounce";
+import { fetchDesignProjects } from "@/services/prototypes";
 
 interface Chat {
   id: number;
@@ -45,6 +47,12 @@ interface Chat {
 }
 
 interface Project {
+  id: number;
+  name: string;
+  description: string;
+}
+
+interface DesignProject {
   id: number;
   name: string;
   description: string;
@@ -117,6 +125,14 @@ export function Sidebar() {
       return response.data.results;
     },
   });
+
+  // Fetch design projects query
+  const { data: designProjects } = useQuery({
+    queryKey: ["designProjects"],
+    queryFn: fetchDesignProjects,
+  });
+
+  console.log("design projects from sidebar", designProjects);
 
   // Delete chat mutation
   const deleteChatMutation = useMutation({
@@ -373,83 +389,54 @@ export function Sidebar() {
             </Button>
           </div>
 
-          {/* Chat List */}
-          <div className="space-y-6">
-            {isLoading ? (
-              <div className="flex justify-center items-center py-4">
-                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-              </div>
-            ) : (
-              <>
-                {categorizedChats.today?.length > 0 && (
-                  <ChatListSection
-                    title="Today"
-                    chats={categorizedChats.today}
-                  />
-                )}
-                {categorizedChats.yesterday?.length > 0 && (
-                  <ChatListSection
-                    title="Yesterday"
-                    chats={categorizedChats.yesterday}
-                  />
-                )}
-                {categorizedChats.lastWeek?.length > 0 && (
-                  <ChatListSection
-                    title="Previous 7 Days"
-                    chats={categorizedChats.lastWeek}
-                  />
-                )}
-                {categorizedChats.older?.length > 0 && (
-                  <ChatListSection
-                    title="Older"
-                    chats={categorizedChats.older}
-                  />
-                )}
-
-                {/* Loading indicator for next page */}
-                {isFetchingNextPage && (
-                  <div className="flex justify-center py-4">
-                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                  </div>
-                )}
-              </>
-            )}
+          {/* Design Projects Section */}
+          <div className="space-y-1">
+            <div className="flex items-center px-2 mb-2">
+              <Layout className="h-4 w-4 text-muted-foreground mr-2" />
+              <span className="text-sm font-medium text-muted-foreground">
+                Design Projects
+              </span>
+            </div>
+            {designProjects?.slice(0, 3).map((project) => (
+              <Button
+                key={project.id}
+                variant="ghost"
+                className="w-full justify-start pl-8 text-sm h-8"
+                asChild
+              >
+                <Link to={`/design-projects/${project.id}`}>
+                  <span className="truncate">
+                    {project.title.slice(0, 15) +
+                      (project.title.length > 15 ? "..." : "")}
+                  </span>
+                </Link>
+              </Button>
+            ))}
+            <Button
+              variant="ghost"
+              className="w-full justify-between text-sm h-8 text-muted-foreground hover:text-foreground"
+              asChild
+            >
+              <Link to="/design-projects">
+                View all designs
+                <ChevronRight className="h-4 w-4" />
+              </Link>
+            </Button>
           </div>
+
+          {/* Chat List */}
+          <ChatListSection title="Today" chats={categorizedChats.today || []} />
+          <ChatListSection
+            title="Yesterday"
+            chats={categorizedChats.yesterday || []}
+          />
+          <ChatListSection
+            title="Last Week"
+            chats={categorizedChats.lastWeek || []}
+          />
+          <ChatListSection title="Older" chats={categorizedChats.older || []} />
         </div>
       </ScrollArea>
-
-      {/* Fixed Footer */}
-      <div className="p-4 border-t mt-auto">
-        <ThemeToggle />
-      </div>
-
-      <AlertDialog
-        open={chatToDelete !== null}
-        onOpenChange={() => setChatToDelete(null)}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This action cannot be undone. This will permanently delete the
-              chat and all its messages.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                if (chatToDelete) {
-                  deleteChatMutation.mutate(chatToDelete);
-                  setChatToDelete(null);
-                }
-              }}
-            >
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 }

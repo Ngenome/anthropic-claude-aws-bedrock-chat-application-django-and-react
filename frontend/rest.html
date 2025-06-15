@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Space Odyssey - Exploring the Final Frontier</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script
+      defer
+      src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"
+    ></script>
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css"
+    />
+  </head>
+  <body class="bg-black text-white overflow-x-hidden">
+    <!-- Navigation -->
+    <nav class="fixed w-full z-50 backdrop-blur-md bg-black/30">
+      <div class="container mx-auto px-6 py-4">
+        <div class="flex items-center justify-between">
+          <div
+            class="text-2xl font-bold bg-gradient-to-r from-purple-500 to-pink-500 text-transparent bg-clip-text"
+          >
+            Space Odyssey
+          </div>
+          <div class="hidden md:flex space-x-8">
+            <a href="#home" class="hover:text-purple-500 transition-colors"
+              >Home</a
+            >
+            <a href="#missions" class="hover:text-purple-500 transition-colors"
+              >Missions</a
+            >
+            <a href="#gallery" class="hover:text-purple-500 transition-colors"
+              >Gallery</a
+            >
+            <a href="#contact" class="hover:text-purple-500 transition-colors"
+              >Contact</a
+            >
+          </div>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section
+      id="home"
+      class="min-h-screen relative flex items-center justify-center"
+    >
+      <div class="absolute inset-0 overflow-hidden">
+        <div
+          class="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1451187580459-43490279c0fa?ixlib=rb-4.0.3')] bg-cover bg-center"
+        ></div>
+        <div class="absolute inset-0 bg-black/50"></div>
+      </div>
+      <div class="container mx-auto px-6 relative z-10">
+        <div
+          class="text-center"
+          x-data="{ shown: false }"
+          x-intersect="shown = true"
+        >
+          <h1
+            class="text-5xl md:text-7xl font-bold mb-6 animate__animated"
+            :class="shown ? 'animate__fadeInUp' : ''"
+          >
+            Explore the Cosmos
+          </h1>
+          <p
+            class="text-xl md:text-2xl mb-8 animate__animated animate__delay-1s"
+            :class="shown ? 'animate__fadeInUp' : ''"
+          >
+            Journey through the final frontier of human exploration
+          </p>
+          <button
+            class="bg-purple-600 hover:bg-purple-700 text-white px-8 py-3 rounded-full transition-all transform hover:scale-105 animate__animated animate__delay-2s"
+            :class="shown ? 'animate__fadeInUp' : ''"
+          >
+            Start Your Journey
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Missions Section -->
+    <section
+      id="missions"
+      class="py-20 bg-gradient-to-b from-black to-purple-900"
+    >
+      <div class="container mx-auto px-6">
+        <h2 class="text-4xl font-bold text-center mb-16">Current Missions</h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+          <!-- Mission Card 1 -->
+          <div
+            class="bg-black/50 backdrop-blur-md p-6 rounded-xl hover:transform hover:scale-105 transition-all duration-300"
+            x-data="{ shown: false }"
+            x-intersect="shown = true"
+          >
+            <div class="text-purple-500 text-4xl mb-4">🚀</div>
+            <h3 class="text-2xl font-bold mb-4">Mars Exploration</h3>
+            <p class="text-gray-300">
+              Discovering the secrets of the Red Planet through advanced rovers
+              and planned human missions.
+            </p>
+          </div>
+
+          <!-- Mission Card 2 -->
+          <div
+            class="bg-black/50 backdrop-blur-md p-6 rounded-xl hover:transform hover:scale-105 transition-all duration-300"
+            x-data="{ shown: false }"
+            x-intersect="shown = true"
+          >
+            <div class="text-purple-500 text-4xl mb-4">🛸</div>
+            <h3 class="text-2xl font-bold mb-4">Deep Space Network</h3>
+            <p class="text-gray-300">
+              Maintaining communication with our spacecraft across the solar
+              system and beyond.
+            </p>
+          </div>
+
+          <!-- Mission Card 3 -->
+          <div
+            class="bg-black/50 backdrop-blur-md p-6 rounded-xl hover:transform hover:scale-105 transition-all duration-300"
+            x-data="{ shown: false }"
+            x-intersect="shown = true"
+          >
+            <div class="text-purple-500 text-4xl mb-4">🌌</div>
+            <h3 class="text-2xl font-bold mb-4">Exoplanet Research</h3>
+            <p class="text-gray-300">
+              Searching for potentially habitable worlds beyond our solar
+              system.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Gallery Section -->
+    <section id="gallery" class="py-20 bg-black">
+      <div class="container mx-auto px-6">
+        <h2 class="text-4xl font-bold text-center mb-16">Space Gallery</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <!-- Gallery items -->
+          <div
+            class="relative group overflow-hidden rounded-xl"
+            x-data="{ shown: false }"
+            x-intersect="shown = true"
+          >
+            <img
+              src="https://images.unsplash.com/photo-1614728263952-84ea256f9679?ixlib=rb-4.0.3"
+              class="w-full h-72 object-cover transform group-hover:scale-110 transition-transform duration-500"
+              alt="Space image"
+            />
+            <div
+              class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-6"
+            >
+              <h3 class="text-xl font-bold">Nebula Formation</h3>
+            </div>
+          </div>
+          <!-- Add more gallery items as needed -->
+        </div>
+      </div>
+    </section>
+
+    <!-- Contact Section -->
+    <section
+      id="contact"
+      class="py-20 bg-gradient-to-t from-black to-purple-900"
+    >
+      <div class="container mx-auto px-6">
+        <h2 class="text-4xl font-bold text-center mb-16">Contact Us</h2>
+        <div
+          class="max-w-md mx-auto bg-black/50 backdrop-blur-md p-8 rounded-xl"
+        >
+          <form class="space-y-6">
+            <div>
+              <label class="block text-sm font-medium mb-2">Name</label>
+              <input
+                type="text"
+                class="w-full px-4 py-2 rounded-lg bg-white/10 border border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
+              />
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-2">Email</label>
+              <input
+                type="email"
+                class="w-full px-4 py-2 rounded-lg bg-white/10 border border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
+              />
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-2">Message</label>
+              <textarea
+                class="w-full px-4 py-2 rounded-lg bg-white/10 border border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500 h-32"
+              ></textarea>
+            </div>
+            <button
+              class="w-full bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-lg transition-colors"
+            >
+              Send Message
+            </button>
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="bg-black py-8">
+      <div class="container mx-auto px-6 text-center text-gray-400">
+        <p>© 2023 Space Odyssey. All rights reserved.</p>
+      </div>
+    </footer>
+
+    <script>
+      // Smooth scroll behavior
+      document.querySelectorAll('a[href^="#"]').forEach((anchor) => {
+        anchor.addEventListener("click", function (e) {
+          e.preventDefault();
+          document.querySelector(this.getAttribute("href")).scrollIntoView({
+            behavior: "smooth",
+          });
+        });
+      });
+
+      // Intersection Observer for animations
+      const observerOptions = {
+        root: null,
+        rootMargin: "0px",
+        threshold: 0.1,
+      };
+
+      const observer = new IntersectionObserver((entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add("animate__fadeInUp");
+          }
+        });
+      }, observerOptions);
+
+      document.querySelectorAll(".animate-on-scroll").forEach((element) => {
+        observer.observe(element);
+      });
+    </script>
+  </body>
+</html>

@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     "social_django",
     "drf_spectacular",
     "storages",
+    "prototypes",
 ]
 AUTHENTICATION_BACKENDS = (
     'social_core.backends.open_id.OpenIdAuth',

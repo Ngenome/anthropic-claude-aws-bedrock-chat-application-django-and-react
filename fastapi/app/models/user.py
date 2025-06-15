@@ -1,5 +1,6 @@
 from sqlalchemy import Column, String, Boolean, DateTime, Integer, Text
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import uuid
 from datetime import datetime
@@ -33,11 +34,11 @@ class User(Base):
     
     # Email verification
     email_verified = Column(Boolean, default=False, index=True)
-    email_verification_token = Column(String(200), nullable=True)
+    email_verification_token = Column(String(500), nullable=True)
     email_verification_sent_at = Column(DateTime(timezone=True), nullable=True)
     
     # Password reset
-    password_reset_token = Column(String(200), nullable=True)
+    password_reset_token = Column(String(500), nullable=True)
     password_reset_sent_at = Column(DateTime(timezone=True), nullable=True)
     
     # Security fields
@@ -62,6 +63,14 @@ class User(Base):
         nullable=False
     )
     last_login = Column(DateTime(timezone=True), nullable=True)
+
+    # Relationships
+    projects = relationship("Project", back_populates="user")
+    chats = relationship("Chat", back_populates="user")
+    memories = relationship("UserMemory", back_populates="user")
+    saved_prompts = relationship("SavedSystemPrompt", back_populates="user")
+    token_usage = relationship("TokenUsage", back_populates="user")
+    design_projects = relationship("DesignProject", back_populates="user")
 
     def __repr__(self):
         return f"<User(id={self.id}, email={self.email})>"

@@ -203,6 +203,7 @@ async def login(
         user.last_login = datetime.utcnow()
         user.last_login_ip = client_ip
         await db.commit()
+        await db.refresh(user)  # Refresh to ensure all attributes are loaded
         
         # Create access token
         access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -218,9 +219,26 @@ async def login(
         rate_limiter.clear_attempts(f"login_{client_ip}")
         
         logger.info(f"User logged in: {user.email}")
+        
+        # Create user dict to avoid greenlet issues
+        user_dict = {
+            "id": user.id,
+            "email": user.email,
+            "username": user.username,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+            "avatar_url": user.avatar_url,
+            "email_verified": user.email_verified,
+            "is_active": user.is_active,
+            "created_at": user.created_at,
+            "updated_at": user.updated_at,
+            "last_login": user.last_login,
+            "full_name": user.full_name
+        }
+        
         return LoginResponse(
             access_token=access_token,
-            user=UserSchema.from_orm(user)
+            user=UserSchema.model_validate(user_dict)
         )
         
     except HTTPException:
@@ -563,7 +581,7 @@ async def google_auth(
         logger.info(f"Google auth successful: {user.email}")
         return LoginResponse(
             access_token=access_token,
-            user=UserSchema.from_orm(user)
+            user=UserSchema.model_validate(user)
         )
         
     except HTTPException:

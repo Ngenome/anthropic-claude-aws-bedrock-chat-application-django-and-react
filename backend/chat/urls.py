@@ -6,7 +6,8 @@ from .views import (
     update_chat_system_prompt, SavedSystemPromptListCreateView,
     SavedSystemPromptRetrieveUpdateDestroyView,
     ProjectChatsView, get_chat_token_usage, edit_message, toggle_message_pair,
-    delete_message_pair, validate_file_view
+    delete_message_pair, validate_file_view, UserMemoryViewSet, MemoryTagViewSet,
+    extract_memories_from_chat, memory_stats, get_user_context
 )
 from rest_framework.routers import DefaultRouter
 
@@ -15,6 +16,8 @@ router = DefaultRouter()
 router.register(r'chats', ChatViewSet, basename='chat')
 router.register(r'projects', ProjectViewSet, basename='project')
 router.register(r'knowledge', ProjectKnowledgeViewSet, basename='knowledge')
+router.register(r'memories', UserMemoryViewSet, basename='memory')
+router.register(r'memory-tags', MemoryTagViewSet, basename='memory-tag')
 
 urlpatterns = [
     # Include router URLs first
@@ -31,10 +34,17 @@ urlpatterns = [
     # System prompts
     path('saved-system-prompts/', SavedSystemPromptListCreateView.as_view()),
     path('saved-system-prompts/<str:pk>/', SavedSystemPromptRetrieveUpdateDestroyView.as_view()),
+    
     # Project chats
     path('projects/<str:pk>/chats/', ProjectChatsView.as_view(), name='project-chats'),
+    
     # Token usage
     path('chats/<str:chat_id>/tokens/', get_chat_token_usage, name='chat-tokens'),
+    
+    # Memory related URLs
+    path('chats/<str:chat_id>/extract-memories/', extract_memories_from_chat, name='extract-memories'),
+    path('memory/stats/', memory_stats, name='memory-stats'),
+    path('memory/context/', get_user_context, name='user-context'),
 
     # File validation
     path('validate-file/', validate_file_view, name='validate-file'),

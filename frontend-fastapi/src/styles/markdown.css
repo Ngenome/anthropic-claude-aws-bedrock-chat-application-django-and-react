@@ -1,0 +1,40 @@
+.markdown-preview {
+  @apply text-gray-800 dark:text-gray-200;
+}
+
+.markdown-preview pre {
+  @apply p-4 rounded-lg overflow-x-auto;
+}
+
+.markdown-preview code {
+  @apply px-1.5 py-0.5 rounded-md bg-gray-200 dark:bg-gray-700 text-sm;
+}
+
+.markdown-preview pre code {
+  @apply p-0 bg-transparent;
+}
+
+.markdown-preview blockquote {
+  @apply border-l-4 border-gray-300 dark:border-gray-600 pl-4 italic;
+}
+
+.markdown-preview table {
+  @apply w-full border-collapse;
+}
+
+.markdown-preview th,
+.markdown-preview td {
+  @apply border border-gray-300 dark:border-gray-600 px-4 py-2;
+}
+
+.markdown-preview th {
+  @apply bg-gray-100 dark:bg-gray-800;
+}
+
+.markdown-preview a {
+  @apply text-blue-600 dark:text-blue-400 hover:underline;
+}
+
+.markdown-preview img {
+  @apply max-w-full h-auto rounded-lg;
+}

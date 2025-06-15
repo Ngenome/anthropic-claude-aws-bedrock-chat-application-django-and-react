@@ -3,8 +3,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django.http import StreamingHttpResponse
 from rest_framework import generics, permissions
-from .models import Chat, MessagePair, Message, SavedSystemPrompt, Project, ProjectKnowledge, MessageContent
-from .serializers import ChatSerializer, MessageSerializer,SystemPromptSerializer, ProjectSerializer, ProjectKnowledgeSerializer
+from .models import Chat, MessagePair, Message, SavedSystemPrompt, Project, ProjectKnowledge, MessageContent, UserMemory, MemoryTag
+from .serializers import ChatSerializer, MessageSerializer,SystemPromptSerializer, ProjectSerializer, ProjectKnowledgeSerializer, UserMemorySerializer, UserMemoryListSerializer, MemoryTagSerializer
 import os
 import json
 import boto3
@@ -19,6 +19,9 @@ from .utils.file_validators import validate_image_size, validate_document_size, 
 from django.core.exceptions import ValidationError
 from rest_framework.pagination import PageNumberPagination
 from django.db.models import Q
+from django.utils import timezone
+from django.db import models
+from .services.memory_service import MemoryExtractionService
 
 
 # Initialize Bedrock client
@@ -141,9 +144,19 @@ def claude_chat_view(request):
                 'type': 'chat_id',
                 'content': str(chat.id)
             }) + '\n'
+            
+            # Extract memories from this conversation asynchronously
+            try:
+                memory_service = MemoryExtractionService()
+                # Extract memories from the current message pair
+                extracted_memories = memory_service.extract_memories_from_chat(chat, message_pair)
+                if extracted_memories:
+                    print(f"Extracted {len(extracted_memories)} memories from chat {chat.id}")
+            except Exception as e:
+                print(f"Error extracting memories: {e}")
 
         # Prepare messages for Claude
-        messages = chat_service.prepare_message_history(chat)
+        messages = chat_service.prepare_message_history(chat, message_text)
         body = chat_service.create_chat_request_body(messages, chat)
         response = chat_service.invoke_model(body)
 
@@ -509,12 +522,166 @@ def toggle_message_pair(request, pair_id):
 @permission_classes([IsAuthenticated])
 def delete_message_pair(request, pair_id):
     try:
-        message_pair = MessagePair.objects.get(id=pair_id)
+        message_pair = MessagePair.objects.get(id=pair_id, chat__user=request.user)
         message_pair.delete()
-        return Response({'status': 'success'})
+        return Response({'message': 'Message pair deleted successfully'})
     except MessagePair.DoesNotExist:
         return Response({'error': 'Message pair not found'}, status=404)
+    except Exception as e:
+        return Response({'error': str(e)}, status=400)
+
+
+# Memory Management Views
+
+class MemoryPagination(PageNumberPagination):
+    page_size = 20
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+
+
+class UserMemoryViewSet(viewsets.ModelViewSet):
+    """ViewSet for managing user memories"""
+    permission_classes = [IsAuthenticated]
+    pagination_class = MemoryPagination
     
+    def get_queryset(self):
+        queryset = UserMemory.objects.filter(user=self.request.user)
+        
+        # Filter by category
+        category = self.request.query_params.get('category')
+        if category:
+            queryset = queryset.filter(category=category)
+        
+        # Filter by tags
+        tag_names = self.request.query_params.getlist('tags')
+        if tag_names:
+            queryset = queryset.filter(tags__name__in=tag_names).distinct()
+        
+        # Filter by active status
+        is_active = self.request.query_params.get('is_active')
+        if is_active is not None:
+            queryset = queryset.filter(is_active=is_active.lower() == 'true')
+        
+        # Search in summary and raw content
+        search = self.request.query_params.get('search')
+        if search:
+            queryset = queryset.filter(
+                Q(summary__icontains=search) | Q(raw_content__icontains=search)
+            )
+        
+        return queryset.order_by('-created_at')
+    
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return UserMemoryListSerializer
+        return UserMemorySerializer
+    
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+    
+    @action(detail=True, methods=['post'])
+    def verify(self, request, pk=None):
+        """Mark a memory as verified by the user"""
+        memory = self.get_object()
+        memory.is_verified = True
+        memory.save()
+        return Response({'message': 'Memory verified successfully'})
+    
+    @action(detail=True, methods=['post'])
+    def toggle_active(self, request, pk=None):
+        """Toggle the active status of a memory"""
+        memory = self.get_object()
+        memory.is_active = not memory.is_active
+        memory.save()
+        status = 'activated' if memory.is_active else 'deactivated'
+        return Response({'message': f'Memory {status} successfully'})
+
+
+class MemoryTagViewSet(viewsets.ModelViewSet):
+    """ViewSet for managing memory tags"""
+    serializer_class = MemoryTagSerializer
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        # Return tags that are used by the current user's memories
+        return MemoryTag.objects.filter(
+            memories__user=self.request.user
+        ).distinct().order_by('name')
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def extract_memories_from_chat(request, chat_id):
+    """Manually trigger memory extraction for a specific chat"""
+    try:
+        chat = Chat.objects.get(id=chat_id, user=request.user)
+        
+        memory_service = MemoryExtractionService()
+        memories = memory_service.extract_memories_from_chat(chat)
+        
+        serializer = UserMemoryListSerializer(memories, many=True)
+        
+        return Response({
+            'message': f'Extracted {len(memories)} memories from chat',
+            'memories': serializer.data
+        })
+        
+    except Chat.DoesNotExist:
+        return Response({'error': 'Chat not found'}, status=404)
+    except Exception as e:
+        return Response({'error': str(e)}, status=500)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def memory_stats(request):
+    """Get memory statistics for the user"""
+    user = request.user
+    
+    total_memories = UserMemory.objects.filter(user=user).count()
+    active_memories = UserMemory.objects.filter(user=user, is_active=True).count()
+    verified_memories = UserMemory.objects.filter(user=user, is_verified=True).count()
+    
+    # Category breakdown
+    category_stats = UserMemory.objects.filter(user=user, is_active=True).values('category').annotate(
+        count=models.Count('id')
+    ).order_by('-count')
+    
+    # Recent memories (last 7 days)
+    from datetime import timedelta
+    recent_cutoff = timezone.now() - timedelta(days=7)
+    recent_memories = UserMemory.objects.filter(
+        user=user, 
+        created_at__gte=recent_cutoff
+    ).count()
+    
+    return Response({
+        'total_memories': total_memories,
+        'active_memories': active_memories,
+        'verified_memories': verified_memories,
+        'recent_memories': recent_memories,
+        'category_breakdown': list(category_stats),
+        'verification_rate': round((verified_memories / total_memories * 100) if total_memories > 0 else 0, 1)
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_user_context(request):
+    """Get relevant user memories for context in conversations"""
+    user = request.user
+    category = request.query_params.get('category')
+    limit = int(request.query_params.get('limit', 10))
+    
+    memory_service = MemoryExtractionService()
+    memories = memory_service.get_relevant_memories(user, category, limit)
+    
+    # Mark as referenced
+    if memories:
+        memory_service.mark_memories_as_referenced(memories)
+    
+    serializer = UserMemoryListSerializer(memories, many=True)
+    return Response(serializer.data)
 
 
 @api_view(['POST'])
