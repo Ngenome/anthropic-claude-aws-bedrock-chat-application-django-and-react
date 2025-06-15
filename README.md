@@ -129,7 +129,7 @@ This project is licensed under the MIT License.
 
 You can find me on:
 
-- Twitter: [@ngen0me](https://twitter.com/_ngenome)
+- Twitter: [@_ngenome](https://twitter.com/_ngenome)
 - LinkedIn: [kelvin-ngeno](https://linkedin.com/in/kelvin-ngeno)
 
 Feel free to reach out for questions, collaborations, or just to connect!
