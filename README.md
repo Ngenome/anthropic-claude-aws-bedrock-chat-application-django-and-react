@@ -15,8 +15,9 @@ This project is a full-stack AI chat application that uses Claude AI via AWS Bed
 
 ### Backend
 
-- Django
+- Django(old)
 - Django Rest Framework
+- Fastapi, Alembic, SQLALchemy
 - AWS Bedrock
 - Knox for token authentication
 
